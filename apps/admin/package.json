@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
+    "build": "prisma generate --config ../../packages/db/prisma.config.ts && next build",
     "start": "next start",
     "lint": "eslint"
   },

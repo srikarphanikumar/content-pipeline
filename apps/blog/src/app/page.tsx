@@ -153,7 +153,7 @@ export default async function Home() {
                 <p className="mt-3 text-sm leading-6 text-stone-600">
                   {"excerpt" in post
                     ? post.excerpt
-                    : post.description || post.subtitle || "Read the full breakdown."}
+                    : (post.description || post.subtitle || "Read the full breakdown.").slice(0, 180)}
                 </p>
               </article>
             ))}

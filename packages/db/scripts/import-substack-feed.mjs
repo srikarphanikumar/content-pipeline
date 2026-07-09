@@ -77,11 +77,19 @@ function itemBodyMarkdown(item) {
 function itemExcerpt(item, bodyMarkdown) {
   const description = stripHtml(item.description || "");
 
-  if (description.length > 40 && !description.toLowerCase().includes("continue reading")) {
+  if (
+    description.length > 40 &&
+    !description.toLowerCase().includes("continue reading") &&
+    !description.includes("substackcdn.com") &&
+    !description.includes("substack-post-media")
+  ) {
     return description.slice(0, 220);
   }
 
   return bodyMarkdown
+    .replace(/!\[[^\]]*]\([^)]+\)/g, " ")
+    .replace(/\[[^\]]*]\(https?:\/\/[^)]+\)/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
     .replace(/[#>*_`[\]()!-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()

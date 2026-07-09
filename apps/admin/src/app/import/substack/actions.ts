@@ -2,7 +2,13 @@
 
 import { XMLParser } from "fast-xml-parser";
 import TurndownService from "turndown";
-import { db, slugify } from "@content-pipeline/db";
+import {
+  db,
+  firstMarkdownImage,
+  normalizeImportedMarkdown,
+  removeLeadingCoverImage,
+  slugify,
+} from "@content-pipeline/db";
 
 type FeedItem = {
   title?: string;
@@ -22,6 +28,7 @@ export type SubstackPreviewItem = {
   excerpt: string;
   tags: string[];
   bodyMarkdown: string;
+  coverImageUrl: string | null;
   exists: boolean;
 };
 
@@ -72,7 +79,7 @@ function itemTags(item: FeedItem) {
 function itemBodyMarkdown(item: FeedItem) {
   const html = item["content:encoded"] || item.description || "";
   const markdown = turndown.turndown(html).trim();
-  return markdown || stripHtml(html);
+  return normalizeImportedMarkdown(markdown || stripHtml(html));
 }
 
 function deriveSlug(title: string, sourceUrl: string) {
@@ -142,6 +149,7 @@ export async function previewSubstackFeed(formData: FormData) {
       const title = String(item.title || "").trim();
       const sourceUrl = itemUrl(item);
       const bodyMarkdown = itemBodyMarkdown(item);
+      const coverImageUrl = firstMarkdownImage(bodyMarkdown);
       const publishedAt = item.pubDate
         ? new Date(item.pubDate).toISOString()
         : null;
@@ -157,7 +165,8 @@ export async function previewSubstackFeed(formData: FormData) {
         publishedAt,
         excerpt: itemExcerpt(item, bodyMarkdown),
         tags: itemTags(item),
-        bodyMarkdown,
+        bodyMarkdown: removeLeadingCoverImage(bodyMarkdown),
+        coverImageUrl,
       };
     })
     .filter((item): item is Omit<SubstackPreviewItem, "exists"> => Boolean(item));
@@ -213,6 +222,7 @@ export async function importSubstackFeed(formData: FormData) {
         slug: item.slug,
         description: item.excerpt || null,
         bodyMarkdown: item.bodyMarkdown,
+        coverImageUrl: item.coverImageUrl,
         tags: item.tags.length > 0 ? item.tags : ["Substack"],
         status: "PUBLISHED_BLOG",
         canonicalUrl: `https://blog.mspk.me/posts/${item.slug}`,

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -79,6 +80,17 @@ export default async function PostPage({ params }: PostPageProps) {
             {formatDate(post.publishedAt || post.createdAt)}
           </p>
         </header>
+
+        {post.coverImageUrl ? (
+          <Image
+            alt=""
+            className="mt-8 aspect-video w-full rounded-lg object-cover"
+            height={420}
+            priority
+            src={post.coverImageUrl}
+            width={960}
+          />
+        ) : null}
 
         <div className="prose prose-stone mt-10 max-w-none prose-pre:overflow-x-auto prose-pre:rounded-lg prose-pre:bg-stone-950 prose-pre:p-4 prose-pre:text-stone-100">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>

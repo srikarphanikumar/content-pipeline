@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { db, formatDate, publishedPostStatuses } from "@content-pipeline/db";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,15 @@ export default async function PostsPage() {
         ) : (
           posts.map((post) => (
             <article className="py-8" key={post.id}>
+              {post.coverImageUrl ? (
+                <Image
+                  alt=""
+                  className="mb-5 aspect-[16/7] w-full rounded-lg object-cover"
+                  height={420}
+                  src={post.coverImageUrl}
+                  width={960}
+                />
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 {post.tags.map((tag) => (
                   <Link

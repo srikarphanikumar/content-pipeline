@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { db } from "@content-pipeline/db";
 
 export const dynamic = "force-dynamic";
@@ -125,12 +126,12 @@ export default async function Home() {
                 Latest
               </p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-                Start with the archive
+                Latest from the archive
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-stone-600">
-              The Substack importer will seed this with the existing 50 posts
-              before new posts are published from the pipeline.
+              Imported Substack posts and new pipeline-published articles live
+              here as the canonical Under The Hood archive.
             </p>
           </div>
 
@@ -140,6 +141,15 @@ export default async function Home() {
                 className="rounded-lg border border-stone-200 p-5 transition hover:border-stone-400"
                 key={post.title}
               >
+                {"coverImageUrl" in post && post.coverImageUrl ? (
+                  <Image
+                    alt=""
+                    className="mb-5 aspect-video rounded-md object-cover"
+                    height={180}
+                    src={post.coverImageUrl}
+                    width={320}
+                  />
+                ) : null}
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
                   {"tags" in post && post.tags.length > 0
                     ? post.tags[0]
@@ -148,7 +158,11 @@ export default async function Home() {
                       : "Under The Hood"}
                 </p>
                 <h3 className="mt-3 text-xl font-semibold leading-7">
-                  {post.title}
+                  {"slug" in post ? (
+                    <Link href={`/posts/${post.slug}`}>{post.title}</Link>
+                  ) : (
+                    post.title
+                  )}
                 </h3>
                 <p className="mt-3 text-sm leading-6 text-stone-600">
                   {"excerpt" in post
@@ -158,6 +172,12 @@ export default async function Home() {
               </article>
             ))}
           </div>
+          <Link
+            className="mt-8 inline-flex h-10 items-center rounded-md border border-stone-300 px-4 text-sm font-semibold text-stone-900"
+            href="/posts"
+          >
+            View all posts
+          </Link>
         </div>
       </section>
 

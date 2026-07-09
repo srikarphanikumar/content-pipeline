@@ -71,7 +71,29 @@ function itemTags(item) {
 function itemBodyMarkdown(item) {
   const html = item["content:encoded"] || item.description || "";
   const markdown = turndown.turndown(html).trim();
-  return markdown || stripHtml(html);
+  return normalizeImportedMarkdown(markdown || stripHtml(html));
+}
+
+function firstMarkdownImage(markdown) {
+  const match = markdown.match(/!\[[^\]]*]\((https?:\/\/[^)]+)\)/);
+  return match?.[1] || null;
+}
+
+function normalizeImportedMarkdown(markdown) {
+  return markdown
+    .replace(
+      /\[\s*!\[[^\]]*]\((https?:\/\/[^)]+)\)\s*]\(https?:\/\/[^)]+\)/g,
+      "![]($1)",
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function removeLeadingCoverImage(markdown) {
+  return markdown
+    .replace(/^!\[[^\]]*]\(https?:\/\/[^)]+\)\s*/s, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function itemExcerpt(item, bodyMarkdown) {
@@ -123,6 +145,7 @@ for (const item of items) {
   const title = String(item.title || "").trim();
   const sourceUrl = itemUrl(item);
   const bodyMarkdown = itemBodyMarkdown(item);
+  const coverImageUrl = firstMarkdownImage(bodyMarkdown);
   const slug = deriveSlug(title, sourceUrl);
 
   if (!title || !sourceUrl || !bodyMarkdown) {
@@ -149,7 +172,8 @@ for (const item of items) {
       title,
       slug,
       description: itemExcerpt(item, bodyMarkdown) || null,
-      bodyMarkdown,
+      bodyMarkdown: removeLeadingCoverImage(bodyMarkdown),
+      coverImageUrl,
       tags: itemTags(item),
       status: "PUBLISHED_BLOG",
       canonicalUrl: `https://blog.mspk.me/posts/${slug}`,

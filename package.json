@@ -15,6 +15,7 @@
     "db:studio": "npm run db:studio --workspace @content-pipeline/db",
     "import:substack": "node packages/db/scripts/import-substack-feed.mjs",
     "repair:substack-excerpts": "node packages/db/scripts/repair-substack-excerpts.mjs",
+    "repair:substack-images": "node packages/db/scripts/repair-substack-images.mjs",
     "seed:demo": "node packages/db/scripts/seed-demo-post.mjs",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"

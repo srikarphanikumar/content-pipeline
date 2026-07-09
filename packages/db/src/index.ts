@@ -33,6 +33,11 @@ export {
   slugify,
   topicSlugToTag,
 } from "./content";
+export {
+  firstMarkdownImage,
+  normalizeImportedMarkdown,
+  removeLeadingCoverImage,
+} from "./markdown";
 export type {
   Platform,
   PlatformPublishStatus,

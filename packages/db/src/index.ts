@@ -25,9 +25,18 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export { PrismaClient };
+export {
+  formatDate,
+  parseTags,
+  publishedPostStatuses,
+  readyPostStatuses,
+  slugify,
+  topicSlugToTag,
+} from "./content";
 export type {
   Platform,
   PlatformPublishStatus,
+  Post,
   PostStatus,
   SubscriberStatus,
 } from "@prisma/client";

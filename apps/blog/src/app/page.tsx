@@ -44,7 +44,7 @@ export default async function Home() {
             Under The Hood
           </Link>
           <div className="flex items-center gap-5 text-sm text-stone-700">
-            <a href="#posts">Posts</a>
+            <Link href="/posts">Posts</Link>
             <a href="#subscribe">Subscribe</a>
             <a href="#about">About</a>
           </div>
@@ -70,12 +70,12 @@ export default async function Home() {
             >
               Subscribe
             </a>
-            <a
+            <Link
               className="inline-flex h-11 items-center justify-center rounded-md border border-stone-300 px-5 text-sm font-semibold text-stone-900"
-              href="#posts"
+              href="/posts"
             >
               Read latest posts
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -138,37 +138,34 @@ export default async function Home() {
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             {(posts.length > 0 ? posts : placeholderPosts).map((post) => (
               <article
-                className="rounded-lg border border-stone-200 p-5 transition hover:border-stone-400"
+                className="overflow-hidden rounded-lg border border-stone-200 transition hover:border-stone-400"
                 key={post.title}
               >
                 {"coverImageUrl" in post && post.coverImageUrl ? (
                   <Image
                     alt=""
-                    className="mb-5 aspect-video rounded-md object-cover"
-                    height={180}
+                    className="aspect-video w-full object-cover"
+                    height={220}
                     src={post.coverImageUrl}
-                    width={320}
+                    width={390}
                   />
                 ) : null}
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-                  {"tags" in post && post.tags.length > 0
-                    ? post.tags[0]
-                    : "tag" in post
-                      ? post.tag
-                      : "Under The Hood"}
-                </p>
-                <h3 className="mt-3 text-xl font-semibold leading-7">
-                  {"slug" in post ? (
-                    <Link href={`/posts/${post.slug}`}>{post.title}</Link>
-                  ) : (
-                    post.title
-                  )}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-stone-600">
-                  {"excerpt" in post
-                    ? post.excerpt
-                    : (post.description || post.subtitle || "Read the full breakdown.").slice(0, 180)}
-                </p>
+                <div className="p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
+                    {"tags" in post && post.tags.length > 0
+                      ? post.tags[0]
+                      : "tag" in post
+                        ? post.tag
+                        : "Under The Hood"}
+                  </p>
+                  <h3 className="mt-3 text-xl font-semibold leading-7">
+                    {"slug" in post ? (
+                      <Link href={`/posts/${post.slug}`}>{post.title}</Link>
+                    ) : (
+                      post.title
+                    )}
+                  </h3>
+                </div>
               </article>
             ))}
           </div>

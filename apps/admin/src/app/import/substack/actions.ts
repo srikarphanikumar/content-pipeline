@@ -61,7 +61,7 @@ function itemUrl(item: FeedItem) {
 
 function itemTags(item: FeedItem) {
   if (!item.category) {
-    return ["Imported"];
+    return ["Substack"];
   }
 
   return (Array.isArray(item.category) ? item.category : [item.category])
@@ -78,6 +78,20 @@ function itemBodyMarkdown(item: FeedItem) {
 function deriveSlug(title: string, sourceUrl: string) {
   const urlSlug = sourceUrl.split("/").filter(Boolean).pop();
   return slugify(urlSlug || title);
+}
+
+function itemExcerpt(item: FeedItem, bodyMarkdown: string) {
+  const description = stripHtml(item.description || "");
+
+  if (description.length > 40 && !description.toLowerCase().includes("continue reading")) {
+    return description.slice(0, 220);
+  }
+
+  return bodyMarkdown
+    .replace(/[#>*_`[\]()!-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
 }
 
 function feedUrlFromInput(value: string) {
@@ -133,7 +147,7 @@ export async function previewSubstackFeed(formData: FormData) {
         slug: deriveSlug(title, sourceUrl),
         sourceUrl,
         publishedAt,
-        excerpt: stripHtml(item.description || "").slice(0, 220),
+        excerpt: itemExcerpt(item, bodyMarkdown),
         tags: itemTags(item),
         bodyMarkdown,
       };
@@ -191,7 +205,7 @@ export async function importSubstackFeed(formData: FormData) {
         slug: item.slug,
         description: item.excerpt || null,
         bodyMarkdown: item.bodyMarkdown,
-        tags: item.tags.length > 0 ? item.tags : ["Imported"],
+        tags: item.tags.length > 0 ? item.tags : ["Substack"],
         status: "PUBLISHED_BLOG",
         canonicalUrl: `https://blog.mspk.me/posts/${item.slug}`,
         sourcePlatform: "SUBSTACK",

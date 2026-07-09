@@ -10,7 +10,10 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^7.2.0"
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "^7.2.0",
+    "dotenv": "17.4.2",
+    "pg": "8.22.0"
   },
   "devDependencies": {
     "prisma": "^7.2.0",
@@ -20,4 +23,3 @@
     "schema": "prisma/schema.prisma"
   }
 }
-

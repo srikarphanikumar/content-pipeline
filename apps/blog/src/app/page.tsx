@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { db } from "@content-pipeline/db";
 
-const featuredPosts = [
+export const dynamic = "force-dynamic";
+
+const placeholderPosts = [
   {
     title: "The Hidden Cost of Hydration in AI-Heavy Frontends",
     tag: "Frontend Internals",
@@ -21,7 +24,17 @@ const featuredPosts = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const posts = await db.post.findMany({
+    where: {
+      status: {
+        in: ["PUBLISHED_BLOG", "PUBLISHED_DEVTO", "PROMOTED_LINKEDIN", "PROMOTED_SOCIAL", "COMPLETE"],
+      },
+    },
+    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+    take: 6,
+  });
+
   return (
     <main className="min-h-screen">
       <header className="border-b border-stone-200 bg-[#fbfaf7]/95">
@@ -122,19 +135,25 @@ export default function Home() {
           </div>
 
           <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {featuredPosts.map((post) => (
+            {(posts.length > 0 ? posts : placeholderPosts).map((post) => (
               <article
                 className="rounded-lg border border-stone-200 p-5 transition hover:border-stone-400"
                 key={post.title}
               >
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">
-                  {post.tag}
+                  {"tags" in post && post.tags.length > 0
+                    ? post.tags[0]
+                    : "tag" in post
+                      ? post.tag
+                      : "Under The Hood"}
                 </p>
                 <h3 className="mt-3 text-xl font-semibold leading-7">
                   {post.title}
                 </h3>
                 <p className="mt-3 text-sm leading-6 text-stone-600">
-                  {post.excerpt}
+                  {"excerpt" in post
+                    ? post.excerpt
+                    : post.description || post.subtitle || "Read the full breakdown."}
                 </p>
               </article>
             ))}

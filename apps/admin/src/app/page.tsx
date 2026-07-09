@@ -1,9 +1,6 @@
-const stats = [
-  { label: "Ready posts", value: "0 / 20", tone: "Needs attention" },
-  { label: "Imported posts", value: "0 / 50", tone: "Substack migration" },
-  { label: "This week", value: "0 / 5", tone: "Weekday cadence" },
-  { label: "Subscribers", value: "0", tone: "Owned audience" },
-];
+import { db } from "@content-pipeline/db";
+
+export const dynamic = "force-dynamic";
 
 const queue = [
   {
@@ -28,7 +25,49 @@ const queue = [
   },
 ];
 
-export default function Home() {
+const oneWeekAgo = () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+export default async function Home() {
+  const weekStart = oneWeekAgo();
+  const [
+    readyPosts,
+    importedPosts,
+    subscribers,
+    postsPublishedThisWeek,
+  ] = await Promise.all([
+    db.post.count({
+      where: {
+        status: {
+          in: ["DRAFT_READY", "READY_TO_PUBLISH"],
+        },
+      },
+    }),
+    db.post.count({
+      where: {
+        sourcePlatform: "SUBSTACK",
+      },
+    }),
+    db.subscriber.count({
+      where: {
+        status: "ACTIVE",
+      },
+    }),
+    db.post.count({
+      where: {
+        publishedAt: {
+          gte: weekStart,
+        },
+      },
+    }),
+  ]);
+
+  const stats = [
+    { label: "Ready posts", value: `${readyPosts} / 20`, tone: "Needs attention" },
+    { label: "Imported posts", value: `${importedPosts} / 50`, tone: "Substack migration" },
+    { label: "This week", value: `${postsPublishedThisWeek} / 5`, tone: "Weekday cadence" },
+    { label: "Subscribers", value: subscribers.toString(), tone: "Owned audience" },
+  ];
+
   return (
     <main className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">

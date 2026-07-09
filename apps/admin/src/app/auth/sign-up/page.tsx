@@ -10,6 +10,7 @@ type SignUpPageProps = {
 
 export default async function SignUpPage({ searchParams }: SignUpPageProps) {
   const { error, message } = await searchParams;
+  const signupEnabled = process.env.ALLOW_ADMIN_SIGNUP === "true";
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
@@ -19,7 +20,7 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
           Create admin account
         </h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Set `ADMIN_EMAIL` in Vercel to restrict sign-ups to your email.
+          Admin sign-up is available only when explicitly enabled.
         </p>
 
         {error ? (
@@ -28,6 +29,13 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
               ? "This email is not allowed to create an admin account."
               : message ||
                 "Could not create the account. Try another email or password."}
+          </div>
+        ) : null}
+
+        {!signupEnabled ? (
+          <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Sign-up is currently disabled. Use sign-in if your account already
+            exists.
           </div>
         ) : null}
 
@@ -60,6 +68,7 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
           </label>
           <button
             className="h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+            disabled={!signupEnabled}
             type="submit"
           >
             Create account

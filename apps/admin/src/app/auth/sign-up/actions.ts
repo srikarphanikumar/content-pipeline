@@ -14,6 +14,10 @@ function errorRedirect(code: string, message?: string) {
 }
 
 export async function signUpWithEmail(formData: FormData) {
+  if (process.env.ALLOW_ADMIN_SIGNUP !== "true") {
+    errorRedirect("sign-up-disabled", "Admin sign-up is disabled.");
+  }
+
   const email = (formData.get("email") as string).trim().toLowerCase();
   const allowedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
 

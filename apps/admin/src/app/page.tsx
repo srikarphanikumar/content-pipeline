@@ -1,5 +1,6 @@
 import { db } from "@content-pipeline/db";
 import { signOut } from "./auth/sign-out/actions";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -158,9 +159,15 @@ export default async function Home() {
               syndicate, and promote from one place.
             </p>
             <div className="mt-5 rounded-md bg-slate-50 p-4 text-sm text-slate-700">
-              Next implementation slice: database schema, post model, and
-              Substack importer.
+              Next implementation slice: import the existing Substack archive.
+              Open `/import/substack` from the admin app.
             </div>
+            <Link
+              className="mt-4 inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+              href="/import/substack"
+            >
+              Import Substack
+            </Link>
           </aside>
         </div>
       </section>

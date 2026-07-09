@@ -1,0 +1,19 @@
+{
+  "name": "content-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @content-pipeline/blog",
+    "dev:blog": "npm run dev --workspace @content-pipeline/blog",
+    "dev:admin": "npm run dev --workspace @content-pipeline/admin",
+    "db:generate": "npm run db:generate --workspace @content-pipeline/db",
+    "db:migrate": "npm run db:migrate --workspace @content-pipeline/db",
+    "db:studio": "npm run db:studio --workspace @content-pipeline/db",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}

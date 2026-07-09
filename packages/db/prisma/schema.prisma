@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PostStatus {
+  IDEA
+  SELECTED
+  DRAFTING
+  DRAFT_READY
+  READY_TO_PUBLISH
+  PUBLISHED_BLOG
+  PUBLISHED_DEVTO
+  PROMOTED_LINKEDIN
+  PROMOTED_SOCIAL
+  COMPLETE
+}
+
+enum Platform {
+  BLOG
+  DEVTO
+  MEDIUM
+  HASHNODE
+  LINKEDIN
+  BLUESKY
+  MASTODON
+  SUBSTACK
+}
+
+enum PlatformPublishStatus {
+  NOT_STARTED
+  GENERATED
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  SKIPPED
+}
+
+enum SubscriberStatus {
+  PENDING
+  ACTIVE
+  UNSUBSCRIBED
+  BOUNCED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  topics Topic[]
+  posts  Post[]
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  noveltyScore Int?
+  audienceFit  Int?
+  difficulty   Int?
+  status      String   @default("backlog")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  posts    Post[]
+}
+
+model Post {
+  id             String     @id @default(cuid())
+  title          String
+  slug           String     @unique
+  subtitle       String?
+  description    String?
+  bodyMarkdown   String     @db.Text
+  coverImageUrl  String?
+  tags           String[]   @default([])
+  status         PostStatus @default(IDEA)
+  canonicalUrl   String?
+  sourcePlatform Platform?
+  sourceUrl      String?
+  publishedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  topicId  String?
+  topic    Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  publications PlatformPublication[]
+}
+
+model PlatformPublication {
+  id           String                @id @default(cuid())
+  platform     Platform
+  status       PlatformPublishStatus @default(NOT_STARTED)
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  externalUrl  String?
+  externalId   String?
+  errorMessage String?               @db.Text
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, platform])
+}
+
+model Subscriber {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  name         String?
+  status       SubscriberStatus @default(PENDING)
+  source       String?
+  referrerUrl  String?
+  confirmedAt  DateTime?
+  unsubscribedAt DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}

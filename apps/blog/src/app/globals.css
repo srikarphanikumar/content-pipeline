@@ -2,8 +2,8 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  --background: #fbfaf7;
-  --foreground: #1d1b16;
+  --background: #090909;
+  --foreground: #f7f2ea;
 }
 
 @theme inline {
@@ -21,4 +21,46 @@ body {
 
 a {
   text-underline-offset: 4px;
+}
+
+@keyframes hero-card-primary {
+  0%,
+  42% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  50%,
+  92% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes hero-card-secondary {
+  0%,
+  42% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  50%,
+  92% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+
+.hero-card-primary {
+  animation: hero-card-primary 9s ease-in-out infinite;
+}
+
+.hero-card-secondary {
+  animation: hero-card-secondary 9s ease-in-out infinite;
 }

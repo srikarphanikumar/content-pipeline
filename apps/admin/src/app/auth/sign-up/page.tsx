@@ -4,11 +4,12 @@ import { signUpWithEmail } from "./actions";
 type SignUpPageProps = {
   searchParams: Promise<{
     error?: string;
+    message?: string;
   }>;
 };
 
 export default async function SignUpPage({ searchParams }: SignUpPageProps) {
-  const { error } = await searchParams;
+  const { error, message } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
@@ -25,7 +26,8 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
           <div className="mt-5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error === "not-allowed"
               ? "This email is not allowed to create an admin account."
-              : "Could not create the account. Try another email or password."}
+              : message ||
+                "Could not create the account. Try another email or password."}
           </div>
         ) : null}
 

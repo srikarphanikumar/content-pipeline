@@ -3,12 +3,22 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/server";
 
+function errorRedirect(code: string, message?: string) {
+  const params = new URLSearchParams({ error: code });
+
+  if (message) {
+    params.set("message", message.slice(0, 180));
+  }
+
+  redirect(`/auth/sign-up?${params.toString()}`);
+}
+
 export async function signUpWithEmail(formData: FormData) {
   const email = (formData.get("email") as string).trim().toLowerCase();
   const allowedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
 
   if (allowedEmail && email !== allowedEmail) {
-    redirect("/auth/sign-up?error=not-allowed");
+    errorRedirect("not-allowed");
   }
 
   const { error } = await auth.signUp.email({
@@ -18,7 +28,7 @@ export async function signUpWithEmail(formData: FormData) {
   });
 
   if (error) {
-    redirect("/auth/sign-up?error=sign-up-failed");
+    errorRedirect("sign-up-failed", error.message);
   }
 
   redirect("/");

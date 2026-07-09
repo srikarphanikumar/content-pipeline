@@ -4,11 +4,12 @@ import { signInWithEmail } from "./actions";
 type SignInPageProps = {
   searchParams: Promise<{
     error?: string;
+    message?: string;
   }>;
 };
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
-  const { error } = await searchParams;
+  const { error, message } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
@@ -23,7 +24,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
 
         {error ? (
           <div className="mt-5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            Could not sign in. Check your email and password.
+            {message || "Could not sign in. Check your email and password."}
           </div>
         ) : null}
 

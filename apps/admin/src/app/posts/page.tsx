@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db, formatDate, readyPostStatuses } from "@content-pipeline/db";
+import { signOut } from "../auth/sign-out/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +25,22 @@ export default async function AdminPostsPage() {
             Ready buffer: {readyCount} / 20
           </p>
         </div>
-        <Link
-          className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-          href="/posts/new"
-        >
-          New post
-        </Link>
+        <div className="flex gap-2">
+          <form action={signOut}>
+            <button
+              className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700"
+              type="submit"
+            >
+              Sign out
+            </button>
+          </form>
+          <Link
+            className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+            href="/posts/new"
+          >
+            New post
+          </Link>
+        </div>
       </div>
 
       <section className="mt-6 rounded-lg border border-slate-200 bg-white">

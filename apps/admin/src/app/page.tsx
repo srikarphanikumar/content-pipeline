@@ -1,4 +1,5 @@
 import { db } from "@content-pipeline/db";
+import { signOut } from "./auth/sign-out/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -84,9 +85,14 @@ export default async function Home() {
             <span className="rounded-md border border-slate-200 px-3 py-2 text-slate-600">
               MVP
             </span>
-            <span className="rounded-md bg-slate-950 px-3 py-2 font-medium text-white">
-              Private admin
-            </span>
+            <form action={signOut}>
+              <button
+                className="rounded-md bg-slate-950 px-3 py-2 font-medium text-white"
+                type="submit"
+              >
+                Sign out
+              </button>
+            </form>
           </div>
         </nav>
       </header>

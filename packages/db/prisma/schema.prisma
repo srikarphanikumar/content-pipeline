@@ -124,6 +124,9 @@ model Subscriber {
   status       SubscriberStatus @default(PENDING)
   source       String?
   referrerUrl  String?
+  confirmationToken String?     @unique
+  unsubscribeToken  String?     @unique
+  lastEmailSentAt   DateTime?
   confirmedAt  DateTime?
   unsubscribedAt DateTime?
   createdAt    DateTime         @default(now())

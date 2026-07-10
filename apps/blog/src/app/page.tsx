@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { db } from "@content-pipeline/db";
+import { subscribe } from "./subscribe/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,22 @@ const placeholderPosts = [
   },
 ];
 
-export default async function Home() {
+type HomeProps = {
+  searchParams: Promise<{
+    subscribe?: string;
+  }>;
+};
+
+const subscribeMessages: Record<string, string> = {
+  pending: "Check your inbox to confirm your subscription.",
+  saved: "You are on the list. Confirmation email is not configured yet.",
+  invalid: "Enter a valid email address.",
+  "already-active": "You are already subscribed.",
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const { subscribe: subscribeStatus } = await searchParams;
+  const subscribeMessage = subscribeStatus ? subscribeMessages[subscribeStatus] : null;
   const posts = await db.post.findMany({
     where: {
       status: {
@@ -130,15 +146,17 @@ export default async function Home() {
               Get the next deep dive.
             </h2>
           </div>
-          <form className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <form action={subscribe} className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <label className="sr-only" htmlFor="email">
               Email address
             </label>
+            <input name="source" type="hidden" value="homepage" />
             <input
               className="h-11 rounded-md border border-white/15 bg-black px-3 text-sm text-white outline-none ring-orange-500/20 placeholder:text-zinc-500 focus:ring-4"
               id="email"
               name="email"
               placeholder="you@example.com"
+              required
               type="email"
             />
             <button
@@ -147,6 +165,9 @@ export default async function Home() {
             >
               Join the list
             </button>
+            {subscribeMessage ? (
+              <p className="text-sm text-zinc-300 sm:col-span-2">{subscribeMessage}</p>
+            ) : null}
           </form>
         </div>
       </section>

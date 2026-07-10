@@ -42,6 +42,7 @@ Blog:
 
 ```txt
 DATABASE_URL
+BLOG_BASE_URL                    optional, defaults to https://blog.mspk.me
 RESEND_API_KEY                  currently placeholder/not wired yet
 NEWSLETTER_FROM_EMAIL           currently placeholder/not wired yet
 ```
@@ -346,26 +347,32 @@ ebde00b Add full Substack sitemap importer
 
 ### Subscriber Flow Not Implemented Yet
 
-The subscribe forms exist visually but do not yet persist subscribers or send confirmation emails.
+Basic subscriber capture is now implemented on the public blog.
 
-Needed:
+Implemented:
 
-- `POST /subscribe` or server action.
-- Store subscriber in Neon.
-- Confirmation token.
-- Confirmation email through Resend.
-- Confirm page.
-- Unsubscribe flow.
-- Source tracking.
+- Homepage subscribe form server action.
+- Subscriber create/update in Neon.
+- Confirmation tokens.
+- Unsubscribe tokens.
+- Confirmation route at `/subscribe/confirm?token=...`.
+- Unsubscribe route at `/unsubscribe?token=...`.
+- Source/referrer tracking.
+- Resend client wiring with graceful fallback when email env vars are missing.
+
+Still needed:
+
+- Configure real `RESEND_API_KEY`.
+- Verify sender/domain for `NEWSLETTER_FROM_EMAIL`.
+- Send a production confirmation email test.
+- Add admin subscriber list/management.
 
 ### No Email Sending Yet
 
-Resend env vars exist as placeholders, but Resend is not wired.
+Resend is wired for subscription confirmation, but production env vars still need to be configured.
 
 Needed:
 
-- Resend client package.
-- Confirmation email.
 - Weekly digest email generation.
 - Manual send flow from admin.
 
@@ -456,34 +463,36 @@ The 50 sitemap imports are working, but Substack HTML is complex. We should spot
 
 ## Recommended Next Steps
 
-### Immediate Next Step: Subscriber Capture
+### Immediate Next Step: Finish Subscriber Email Setup
 
-This is the most important next product feature because the whole strategy depends on owning the audience.
+Subscriber capture is implemented. The immediate remaining setup is making confirmation email delivery work in production.
+
+Configure:
+
+```txt
+RESEND_API_KEY
+NEWSLETTER_FROM_EMAIL
+BLOG_BASE_URL
+```
+
+Then test:
+
+```txt
+Submit homepage subscribe form
+Receive confirmation email
+Open /subscribe/confirm?token=...
+Open unsubscribe link
+```
+
+### After Email Setup: Admin Subscriber Management
 
 Build:
 
 ```txt
-Subscribe form server action
-Subscriber create/update
-Confirmation email
-Confirm route
-Unsubscribe route
-Source/referrer tracking
-```
-
-Suggested routes:
-
-```txt
-/subscribe/confirm?token=...
-/unsubscribe?token=...
-```
-
-Suggested fields to add if needed:
-
-```txt
-confirmationToken
-unsubscribeToken
-lastEmailSentAt
+Subscriber list
+Status filters
+Source/referrer columns
+Manual unsubscribe/reactivate
 ```
 
 ### After Subscriber Capture: dev.to Publishing
@@ -604,4 +613,3 @@ Still to build:
 - 20-post buffer workflows.
 - Analytics.
 - New post generation and syndication pipeline.
-

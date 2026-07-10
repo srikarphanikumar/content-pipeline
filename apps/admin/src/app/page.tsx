@@ -159,15 +159,23 @@ export default async function Home() {
               syndicate, and promote from one place.
             </p>
             <div className="mt-5 rounded-md bg-slate-50 p-4 text-sm text-slate-700">
-              Next implementation slice: import the existing Substack archive.
-              Open `/import/substack` from the admin app.
+              Subscriber capture is live on the blog. Review confirmed,
+              pending, and unsubscribed readers from the subscriber list.
             </div>
-            <Link
-              className="mt-4 inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-              href="/import/substack"
-            >
-              Import Substack
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+                href="/subscribers"
+              >
+                View subscribers
+              </Link>
+              <Link
+                className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700"
+                href="/import/substack"
+              >
+                Import Substack
+              </Link>
+            </div>
           </aside>
         </div>
       </section>

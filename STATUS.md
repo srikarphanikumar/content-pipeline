@@ -217,6 +217,7 @@ Admin routes currently include:
 /posts/new
 /posts/[id]
 /import/substack
+/subscribers
 ```
 
 Admin currently:
@@ -231,6 +232,8 @@ Admin currently:
 - Can edit posts manually.
 - Can list posts.
 - Can import Substack content.
+- Can view subscribers by status.
+- Can manually activate or unsubscribe subscribers.
 
 ### 5. Neon Auth
 
@@ -253,6 +256,7 @@ Protected routes:
 /
 /posts/*
 /import/*
+/subscribers/*
 ```
 
 Things fixed during setup:
@@ -365,7 +369,7 @@ Still needed:
 - Configure real `RESEND_API_KEY`.
 - Verify sender/domain for `NEWSLETTER_FROM_EMAIL`.
 - Send a production confirmation email test.
-- Add admin subscriber list/management.
+- Add resend confirmation action from admin for pending subscribers.
 
 ### No Email Sending Yet
 
@@ -484,15 +488,22 @@ Open /subscribe/confirm?token=...
 Open unsubscribe link
 ```
 
-### After Email Setup: Admin Subscriber Management
+### Admin Subscriber Management
 
-Build:
+Implemented:
 
 ```txt
 Subscriber list
 Status filters
 Source/referrer columns
 Manual unsubscribe/reactivate
+```
+
+Still needed:
+
+```txt
+Resend confirmation email from admin
+CSV export
 ```
 
 ### After Subscriber Capture: dev.to Publishing

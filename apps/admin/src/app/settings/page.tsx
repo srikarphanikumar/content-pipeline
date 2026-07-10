@@ -24,6 +24,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     },
   });
   const message = linkedin ? linkedInMessages[linkedin] || `LinkedIn returned: ${linkedin}` : null;
+  const blueskyHandle = process.env.BLUESKY_HANDLE;
+  const blueskyConfigured = Boolean(blueskyHandle && process.env.BLUESKY_APP_PASSWORD);
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-6 py-8">
@@ -82,6 +84,44 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           >
             {linkedInConnection ? "Reconnect LinkedIn" : "Connect LinkedIn"}
           </a>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Bluesky</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+              Short-form social account
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Bluesky uses a handle and app password from environment variables,
+              so there is no OAuth connect button.
+            </p>
+            <div className="mt-4 grid gap-1 text-sm text-slate-600">
+              <p>
+                Status:{" "}
+                <span className="font-semibold text-slate-950">
+                  {blueskyConfigured ? "Configured" : "Missing env vars"}
+                </span>
+              </p>
+              {blueskyHandle ? (
+                <p>
+                  Handle:{" "}
+                  <span className="font-semibold text-slate-950">{blueskyHandle}</span>
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <span
+            className={`inline-flex h-10 w-fit items-center rounded-md px-4 text-sm font-semibold ${
+              blueskyConfigured
+                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+            }`}
+          >
+            {blueskyConfigured ? "Ready" : "Needs setup"}
+          </span>
         </div>
       </section>
     </main>

@@ -1,31 +1,8 @@
-import { db } from "@content-pipeline/db";
-import { signOut } from "./auth/sign-out/actions";
 import Link from "next/link";
+import { db } from "@content-pipeline/db";
+import { AdminShell, PrimaryLink, SecondaryLink } from "./components/AdminShell";
 
 export const dynamic = "force-dynamic";
-
-const queue = [
-  {
-    title: "Import existing Substack archive",
-    status: "Next",
-    detail: "Pull RSS/export data, normalize content, review slugs and tags.",
-  },
-  {
-    title: "Publish canonical blog posts",
-    status: "Planned",
-    detail: "Store posts once and render them on blog.mspk.me.",
-  },
-  {
-    title: "Syndicate to dev.to",
-    status: "Planned",
-    detail: "Use dev.to API keys to publish technical articles.",
-  },
-  {
-    title: "Generate promotion copy",
-    status: "Planned",
-    detail: "Create LinkedIn, Bluesky, Mastodon, and first-comment CTAs.",
-  },
-];
 
 const oneWeekAgo = () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
@@ -34,8 +11,13 @@ export default async function Home() {
   const [
     readyPosts,
     importedPosts,
-    subscribers,
+    activeSubscribers,
     postsPublishedThisWeek,
+    totalTopics,
+    openTopics,
+    devToDrafts,
+    promotionAssets,
+    recentPosts,
   ] = await Promise.all([
     db.post.count({
       where: {
@@ -61,130 +43,168 @@ export default async function Home() {
         },
       },
     }),
+    db.topic.count(),
+    db.topic.count({
+      where: {
+        status: {
+          not: "done",
+        },
+      },
+    }),
+    db.platformPublication.count({
+      where: {
+        platform: "DEVTO",
+        status: "GENERATED",
+      },
+    }),
+    db.promotionAsset.count(),
+    db.post.findMany({
+      orderBy: [{ updatedAt: "desc" }],
+      take: 6,
+      include: {
+        publications: true,
+        promotionAssets: true,
+      },
+    }),
   ]);
 
   const stats = [
-    { label: "Ready posts", value: `${readyPosts} / 20`, tone: "Needs attention" },
-    { label: "Imported posts", value: `${importedPosts} / 50`, tone: "Substack migration" },
-    { label: "This week", value: `${postsPublishedThisWeek} / 5`, tone: "Weekday cadence" },
-    { label: "Subscribers", value: subscribers.toString(), tone: "Owned audience" },
+    { href: "/posts", label: "Ready posts", value: `${readyPosts} / 20`, tone: "Buffer target" },
+    { href: "/posts", label: "Imported posts", value: `${importedPosts} / 50`, tone: "Archive owned" },
+    { href: "/posts", label: "This week", value: `${postsPublishedThisWeek} / 5`, tone: "Publishing pace" },
+    { href: "/subscribers", label: "Subscribers", value: activeSubscribers.toString(), tone: "Confirmed readers" },
+    { href: "/topics", label: "Open topics", value: `${openTopics} / ${Math.max(totalTopics, 1)}`, tone: "Backlog" },
+    { href: "/posts", label: "dev.to drafts", value: devToDrafts.toString(), tone: "Syndication" },
+    { href: "/posts", label: "Promo assets", value: promotionAssets.toString(), tone: "Generated copy" },
+  ];
+
+  const workflow = [
+    {
+      title: "Topic backlog",
+      detail: "Capture ideas and move the strongest ones into the ready buffer.",
+      href: "/topics",
+      status: openTopics > 0 ? `${openTopics} open` : "Needs topics",
+    },
+    {
+      title: "Canonical posts",
+      detail: "Create or edit owned posts before syndicating anywhere else.",
+      href: "/posts",
+      status: `${readyPosts} ready`,
+    },
+    {
+      title: "dev.to drafts",
+      detail: "Create draft syndication posts with canonical links back to the blog.",
+      href: "/posts",
+      status: `${devToDrafts} generated`,
+    },
+    {
+      title: "Promotion copy",
+      detail: "Generate LinkedIn, first comment, and Bluesky copy for each post.",
+      href: "/posts",
+      status: `${promotionAssets} assets`,
+    },
+    {
+      title: "Owned audience",
+      detail: "Review active, pending, and unsubscribed readers.",
+      href: "/subscribers",
+      status: `${activeSubscribers} active`,
+    },
   ];
 
   return (
-    <main className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              Under The Hood
+    <AdminShell
+      actions={
+        <>
+          <PrimaryLink href="/posts/new">New post</PrimaryLink>
+          <SecondaryLink href="/topics">Topic backlog</SecondaryLink>
+        </>
+      }
+      description="Operate the Under The Hood publishing loop from one place: topics, canonical posts, syndication, promotion, and subscribers."
+      eyebrow="Pipeline overview"
+      title="Content control room"
+    >
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+        {stats.map((stat) => (
+          <Link
+            className="rounded-lg border border-white/10 bg-[#141414] p-4 transition hover:border-orange-400"
+            href={stat.href}
+            key={stat.label}
+          >
+            <p className="text-sm text-zinc-400">{stat.label}</p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
+              {stat.value}
             </p>
-            <h1 className="text-xl font-semibold tracking-tight">
-              Content Pipeline
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Link
-              className="rounded-md border border-slate-200 px-3 py-2 font-medium text-slate-700"
-              href="/settings"
-            >
-              Settings
-            </Link>
-            <span className="rounded-md border border-slate-200 px-3 py-2 text-slate-600">
-              MVP
-            </span>
-            <form action={signOut}>
-              <button
-                className="rounded-md bg-slate-950 px-3 py-2 font-medium text-white"
-                type="submit"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </nav>
-      </header>
-
-      <section className="mx-auto max-w-7xl px-6 py-8">
-        <div className="grid gap-4 md:grid-cols-4">
-          {stats.map((stat) => (
-            <section
-              className="rounded-lg border border-slate-200 bg-white p-5"
-              key={stat.label}
-            >
-              <p className="text-sm text-slate-500">{stat.label}</p>
-              <p className="mt-3 text-3xl font-semibold tracking-tight">
-                {stat.value}
-              </p>
-              <p className="mt-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
-                {stat.tone}
-              </p>
-            </section>
-          ))}
-        </div>
-
-        <div className="mt-8 grid gap-6 lg:grid-cols-[0.7fr_0.3fr]">
-          <section className="rounded-lg border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Publishing queue
-              </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-                Build order from the BRD
-              </h2>
-            </div>
-            <div className="divide-y divide-slate-200">
-              {queue.map((item) => (
-                <article className="flex gap-4 p-5" key={item.title}>
-                  <span className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-900" />
-                  <div className="flex-1">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <h3 className="font-semibold">{item.title}</h3>
-                      <span className="w-fit rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                        {item.status}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {item.detail}
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <aside className="rounded-lg border border-slate-200 bg-white p-5">
-            <p className="text-sm font-medium text-slate-500">
-              Operating rule
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-orange-400">
+              {stat.tone}
             </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-              Keep 20 posts ready.
+          </Link>
+        ))}
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
+          <div className="border-b border-white/10 p-5">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+              Workflow
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+              Current operating loop
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              The dashboard will flag the buffer whenever ready posts drop
-              below the target. The pipeline should generate, review, publish,
-              syndicate, and promote from one place.
-            </p>
-            <div className="mt-5 rounded-md bg-slate-50 p-4 text-sm text-slate-700">
-              Subscriber capture is live on the blog. Review confirmed,
-              pending, and unsubscribed readers from the subscriber list.
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+          </div>
+          <div className="divide-y divide-white/10">
+            {workflow.map((item) => (
               <Link
-                className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-                href="/subscribers"
+                className="grid gap-3 p-5 transition hover:bg-white/[0.03] md:grid-cols-[1fr_auto] md:items-center"
+                href={item.href}
+                key={item.title}
               >
-                View subscribers
+                <div>
+                  <h3 className="font-semibold text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-400">{item.detail}</p>
+                </div>
+                <span className="w-fit rounded-md bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-300 ring-1 ring-orange-400/30">
+                  {item.status}
+                </span>
               </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+            Recent posts
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+            Pick up where you left off
+          </h2>
+          <div className="mt-5 divide-y divide-white/10">
+            {recentPosts.map((post) => (
               <Link
-                className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700"
-                href="/import/substack"
+                className="block py-4 transition hover:text-orange-300"
+                href={`/posts/${post.id}`}
+                key={post.id}
               >
-                Import Substack
+                <p className="font-semibold text-white">{post.title}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                  <span className="rounded-md bg-white/10 px-2 py-1 text-zinc-300">
+                    {post.status}
+                  </span>
+                  {post.publications.some((publication) => publication.platform === "DEVTO") ? (
+                    <span className="rounded-md bg-orange-500 px-2 py-1 text-black">
+                      dev.to
+                    </span>
+                  ) : null}
+                  {post.promotionAssets.length > 0 ? (
+                    <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-emerald-300">
+                      promo
+                    </span>
+                  ) : null}
+                </div>
               </Link>
-            </div>
-          </aside>
-        </div>
-      </section>
-    </main>
+            ))}
+          </div>
+        </section>
+      </div>
+    </AdminShell>
   );
 }

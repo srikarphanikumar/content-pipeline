@@ -1,6 +1,6 @@
 # Under The Hood Content Pipeline Status
 
-Last updated: July 9, 2026
+Last updated: July 10, 2026
 
 ## Current Deployment
 
@@ -43,8 +43,8 @@ Blog:
 ```txt
 DATABASE_URL
 BLOG_BASE_URL                    optional, defaults to https://blog.mspk.me
-RESEND_API_KEY                  currently placeholder/not wired yet
-NEWSLETTER_FROM_EMAIL           currently placeholder/not wired yet
+RESEND_API_KEY
+NEWSLETTER_FROM_EMAIL
 ```
 
 Admin/pipeline:
@@ -55,7 +55,13 @@ NEON_AUTH_BASE_URL
 NEON_AUTH_COOKIE_SECRET
 ADMIN_EMAIL
 ALLOW_ADMIN_SIGNUP              should be false after admin account exists
-DEVTO_API_KEY                   currently placeholder/not wired yet
+DEVTO_API_KEY
+OPENAI_API_KEY
+LINKEDIN_CLIENT_ID
+LINKEDIN_CLIENT_SECRET
+LINKEDIN_REDIRECT_URI
+BLUESKY_HANDLE
+BLUESKY_APP_PASSWORD
 ```
 
 Important security note:
@@ -179,6 +185,8 @@ Public routes currently include:
 /posts/[slug]
 /topics/[slug]
 /rss.xml
+/subscribe/confirm
+/unsubscribe
 ```
 
 The blog currently:
@@ -191,6 +199,10 @@ The blog currently:
 - Supports pagination on `/posts`.
 - Uses a sticky sidebar on individual post pages for subscribe/context.
 - Exposes an RSS feed at `/rss.xml`.
+- Captures newsletter subscribers.
+- Sends Resend confirmation emails.
+- Confirms subscriptions through `/subscribe/confirm?token=...`.
+- Supports unsubscribe through `/unsubscribe?token=...`.
 
 Recent design changes:
 
@@ -218,6 +230,7 @@ Admin routes currently include:
 /posts
 /posts/new
 /posts/[id]
+/topics
 /import/substack
 /subscribers
 /settings
@@ -236,12 +249,15 @@ Admin currently:
 - Can create posts manually.
 - Can edit posts manually.
 - Can list posts.
+- Has a topic backlog page for new post ideas.
 - Can import Substack content.
 - Can view subscribers by status.
 - Can manually activate or unsubscribe subscribers.
 - Can create dev.to draft articles from post edit pages.
 - Can connect LinkedIn through OAuth and store the platform connection.
+- Shows Bluesky env configuration status.
 - Can generate and edit LinkedIn/Bluesky promotion copy from post edit pages.
+- Uses a shared black/orange admin shell with persistent navigation.
 
 ### 5. Neon Auth
 
@@ -263,6 +279,7 @@ Protected routes:
 ```txt
 /
 /posts/*
+/topics/*
 /import/*
 /subscribers/*
 /settings/*
@@ -358,9 +375,9 @@ ebde00b Add full Substack sitemap importer
 
 ## Known Issues / Gaps
 
-### Subscriber Flow Not Implemented Yet
+### Subscriber Capture
 
-Basic subscriber capture is now implemented on the public blog.
+Subscriber capture is implemented on the public blog.
 
 Implemented:
 
@@ -371,18 +388,16 @@ Implemented:
 - Confirmation route at `/subscribe/confirm?token=...`.
 - Unsubscribe route at `/unsubscribe?token=...`.
 - Source/referrer tracking.
-- Resend client wiring with graceful fallback when email env vars are missing.
+- Resend client wiring.
+- Production Resend sender configured and tested.
 
 Still needed:
 
-- Configure real `RESEND_API_KEY`.
-- Verify sender/domain for `NEWSLETTER_FROM_EMAIL`.
-- Send a production confirmation email test.
 - Add resend confirmation action from admin for pending subscribers.
 
-### No Email Sending Yet
+### Email Sending
 
-Resend is wired for subscription confirmation, but production env vars still need to be configured.
+Resend is wired for subscription confirmation.
 
 Needed:
 
@@ -411,7 +426,7 @@ Still needed:
 
 ### Social Promotion Setup
 
-LinkedIn OAuth setup and promotion copy generation are implemented. Bluesky env setup is visible in settings. Posting to LinkedIn/Bluesky and Mastodon are not wired yet.
+LinkedIn OAuth setup and promotion copy generation are implemented. Bluesky env setup is configured and visible in settings. Posting to LinkedIn/Bluesky and Mastodon are not wired yet.
 
 Implemented:
 
@@ -430,17 +445,16 @@ Needed:
 
 - LinkedIn post API call after promotion copy is generated.
 - Bluesky post API call after promotion copy is generated.
-- Bluesky/Mastodon connection setup.
+- Mastodon connection setup if that channel becomes useful.
 
 ### No AI Draft Generation Yet
 
-The admin does not yet generate topics or drafts.
+The admin has a topic backlog, but does not yet generate topics or drafts automatically.
 
 Needed:
 
-- AI provider decision.
 - Prompt templates.
-- Topic backlog UI.
+- AI topic generation.
 - Draft generation flow.
 - 20-post buffer automation.
 
@@ -494,90 +508,67 @@ The 50 sitemap imports are working, but Substack HTML is complex. We should spot
 
 ## Recommended Next Steps
 
-### Immediate Next Step: Finish Subscriber Email Setup
+### Immediate Next Step: UX Pass
 
-Subscriber capture is implemented. The immediate remaining setup is making confirmation email delivery work in production.
-
-Configure:
+The first UX pass is underway and the core MVP loop now works:
 
 ```txt
-RESEND_API_KEY
-NEWSLETTER_FROM_EMAIL
-BLOG_BASE_URL
+Blog archive
+Newsletter capture
+Subscriber management
+dev.to draft creation
+LinkedIn OAuth
+Bluesky setup
+Promotion copy generation
 ```
 
-Then test:
+Implemented in this pass:
 
-```txt
-Submit homepage subscribe form
-Receive confirmation email
-Open /subscribe/confirm?token=...
-Open unsubscribe link
-```
+- Shared black/orange admin shell.
+- Persistent links to Dashboard, Posts, Topics, Subscribers, Settings, and Blog.
+- Dashboard replaced stale BRD/dummy queue with live workflow cards.
+- Posts list now has status filters, clearer status badges, and row-level navigation.
+- Post workspace now groups Blog, dev.to, Promotion, and Edit sections.
+- Copy-to-clipboard controls for generated promotion assets.
+- Settings page redesigned as provider status cards.
+- Topic backlog page added with topic creation and status updates.
 
-### Admin Subscriber Management
+Still useful to improve:
 
-Implemented:
+- Better empty/loading/error states.
+- Mobile/tablet polish.
+- Optional active nav state.
+- More detailed topic-to-post conversion flow.
 
-```txt
-Subscriber list
-Status filters
-Source/referrer columns
-Manual unsubscribe/reactivate
-```
-
-Still needed:
-
-```txt
-Resend confirmation email from admin
-CSV export
-```
-
-### After Subscriber Capture: dev.to Publishing
-
-Build dev.to adapter:
-
-```txt
-Admin selects post
-Generate dev.to Markdown with CTA
-Publish to dev.to API
-Store dev.to URL
-Mark platform status
-```
-
-CTA should point back to:
-
-```txt
-https://blog.mspk.me
-```
-
-or post-specific:
-
-```txt
-https://blog.mspk.me/posts/[slug]
-```
-
-### After dev.to: Promotion Copy
+### After UX: Posting Actions
 
 Build:
 
-- LinkedIn hook generator.
-- LinkedIn post generator.
-- First comment generator.
-- Bluesky/Mastodon short copy.
+- Post generated Bluesky copy through the Bluesky API.
+- Post generated LinkedIn copy through the LinkedIn API.
+- Store posted URLs/statuses in `PlatformPublication`.
+- Add retry/error states for failed platform posts.
 
-First comment direction:
-
-```txt
-I write deeper frontend + AI internals breakdowns in Under The Hood.
-Subscribe here: https://blog.mspk.me
-```
-
-### After Promotion: Topic/Draft Pipeline
+### After Posting: Draft/Topic Pipeline
 
 Build:
 
-- Topic backlog.
+- Topic backlog UI.
+- OpenAI topic generation.
+- Draft generation flow.
+- Ready-buffer workflow for maintaining 20 draft-ready posts.
+
+### Later Improvements
+
+- Update existing dev.to drafts.
+- Publish live to dev.to from admin after review.
+- Pull dev.to stats/status back into admin.
+- Resend confirmation email action from admin for pending subscribers.
+- Subscriber CSV export.
+- Weekly digest generation/manual send flow.
+- Image generation for new posts.
+- UTM parsing and conversion reporting.
+- Auto-classify imported posts into richer topics/tags.
 - Novelty scoring.
 - Draft editor.
 - AI-generated Markdown drafts.

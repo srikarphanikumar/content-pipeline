@@ -13,6 +13,12 @@ const statuses: PostStatus[] = [
   "COMPLETE",
 ];
 
+const labelClass = "grid gap-2 text-sm font-semibold text-zinc-300";
+const inputClass =
+  "h-11 rounded-md border border-white/10 bg-black px-3 text-white outline-none ring-orange-500/20 placeholder:text-zinc-600 focus:ring-4";
+const textareaClass =
+  "rounded-md border border-white/10 bg-black px-3 py-3 text-white outline-none ring-orange-500/20 placeholder:text-zinc-600 focus:ring-4";
+
 type PostFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   post?: Post;
@@ -21,49 +27,49 @@ type PostFormProps = {
 export function PostForm({ action, post }: PostFormProps) {
   return (
     <form action={action} className="grid gap-5">
-      <label className="grid gap-2 text-sm font-medium text-slate-700">
+      <label className={labelClass}>
         Title
         <input
-          className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+          className={inputClass}
           name="title"
           required
           defaultValue={post?.title}
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-medium text-slate-700">
+      <label className={labelClass}>
         Slug
         <input
-          className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+          className={inputClass}
           name="slug"
           placeholder="generated-from-title-if-empty"
           defaultValue={post?.slug}
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-medium text-slate-700">
+      <label className={labelClass}>
         Subtitle
         <input
-          className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+          className={inputClass}
           name="subtitle"
           defaultValue={post?.subtitle || ""}
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-medium text-slate-700">
+      <label className={labelClass}>
         Description
         <textarea
-          className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-slate-950"
+          className={`${textareaClass} min-h-24`}
           name="description"
           defaultValue={post?.description || ""}
         />
       </label>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <label className="grid gap-2 text-sm font-medium text-slate-700">
+        <label className={labelClass}>
           Status
           <select
-            className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+            className={inputClass}
             name="status"
             defaultValue={post?.status || "DRAFT_READY"}
           >
@@ -75,20 +81,20 @@ export function PostForm({ action, post }: PostFormProps) {
           </select>
         </label>
 
-        <label className="grid gap-2 text-sm font-medium text-slate-700">
+        <label className={labelClass}>
           Tags
           <input
-            className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+            className={inputClass}
             name="tags"
             placeholder="Frontend, AI UX"
             defaultValue={post?.tags.join(", ") || ""}
           />
         </label>
 
-        <label className="grid gap-2 text-sm font-medium text-slate-700">
+        <label className={labelClass}>
           Published date
           <input
-            className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+            className={inputClass}
             name="publishedAt"
             type="date"
             defaultValue={post?.publishedAt?.toISOString().slice(0, 10) || ""}
@@ -96,20 +102,20 @@ export function PostForm({ action, post }: PostFormProps) {
         </label>
       </div>
 
-      <label className="grid gap-2 text-sm font-medium text-slate-700">
+      <label className={labelClass}>
         Canonical URL
         <input
-          className="h-11 rounded-md border border-slate-300 px-3 text-slate-950"
+          className={inputClass}
           name="canonicalUrl"
           placeholder="https://blog.mspk.me/posts/..."
           defaultValue={post?.canonicalUrl || ""}
         />
       </label>
 
-      <label className="grid gap-2 text-sm font-medium text-slate-700">
+      <label className={labelClass}>
         Body Markdown
         <textarea
-          className="min-h-[420px] rounded-md border border-slate-300 px-3 py-3 font-mono text-sm leading-6 text-slate-950"
+          className={`${textareaClass} min-h-[520px] font-mono text-sm leading-6`}
           name="bodyMarkdown"
           required
           defaultValue={post?.bodyMarkdown || ""}
@@ -117,7 +123,7 @@ export function PostForm({ action, post }: PostFormProps) {
       </label>
 
       <button
-        className="h-11 w-fit rounded-md bg-slate-950 px-5 text-sm font-semibold text-white"
+        className="h-11 w-fit rounded-md bg-orange-500 px-5 text-sm font-semibold text-black transition hover:bg-orange-400"
         type="submit"
       >
         Save post

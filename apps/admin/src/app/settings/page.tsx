@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { db, formatDate } from "@content-pipeline/db";
-import { signOut } from "../auth/sign-out/actions";
+import { AdminShell } from "../components/AdminShell";
 
 export const dynamic = "force-dynamic";
 
@@ -26,104 +25,100 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const message = linkedin ? linkedInMessages[linkedin] || `LinkedIn returned: ${linkedin}` : null;
   const blueskyHandle = process.env.BLUESKY_HANDLE;
   const blueskyConfigured = Boolean(blueskyHandle && process.env.BLUESKY_APP_PASSWORD);
+  const devToConfigured = Boolean(process.env.DEVTO_API_KEY);
+  const openAiConfigured = Boolean(process.env.OPENAI_API_KEY);
+
+  const cards = [
+    {
+      title: "LinkedIn",
+      eyebrow: "OAuth",
+      status: linkedInConnection ? "Connected" : "Needs connection",
+      tone: linkedInConnection ? "ready" : "warning",
+      detail: linkedInConnection
+        ? `Connected as ${linkedInConnection.displayName || linkedInConnection.email || "LinkedIn member"}`
+        : "Connect before posting promotion copy from the pipeline.",
+      meta: linkedInConnection ? `Token expires ${formatDate(linkedInConnection.expiresAt)}` : null,
+      action: (
+        <a
+          className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
+          href="/api/oauth/linkedin/start"
+        >
+          {linkedInConnection ? "Reconnect LinkedIn" : "Connect LinkedIn"}
+        </a>
+      ),
+    },
+    {
+      title: "Bluesky",
+      eyebrow: "App password",
+      status: blueskyConfigured ? "Ready" : "Missing env vars",
+      tone: blueskyConfigured ? "ready" : "warning",
+      detail: blueskyHandle ? `Handle: ${blueskyHandle}` : "Set BLUESKY_HANDLE and BLUESKY_APP_PASSWORD.",
+      meta: "Used for short-form promotion posts.",
+      action: null,
+    },
+    {
+      title: "dev.to",
+      eyebrow: "API key",
+      status: devToConfigured ? "Ready" : "Missing API key",
+      tone: devToConfigured ? "ready" : "warning",
+      detail: "Creates draft articles with canonical links back to the blog.",
+      meta: "Draft-first publishing flow.",
+      action: null,
+    },
+    {
+      title: "OpenAI",
+      eyebrow: "Generation",
+      status: openAiConfigured ? "Ready" : "Missing API key",
+      tone: openAiConfigured ? "ready" : "warning",
+      detail: "Generates LinkedIn and Bluesky promotion copy.",
+      meta: "Used server-side only.",
+      action: null,
+    },
+  ];
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-6 py-8">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
-        <div>
-          <Link className="text-sm font-medium text-slate-500" href="/">
-            Dashboard
-          </Link>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">Settings</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Connect external platforms used by the content pipeline.
-          </p>
-        </div>
-        <form action={signOut}>
-          <button
-            className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-            type="submit"
-          >
-            Sign out
-          </button>
-        </form>
-      </div>
-
+    <AdminShell
+      description="Review provider connections and server-side credentials used by syndication, promotion, and generation workflows."
+      eyebrow="Configuration"
+      title="Settings"
+    >
       {message ? (
-        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        <div className="mb-6 rounded-lg border border-orange-400/30 bg-orange-500/10 p-4 text-sm text-orange-200">
           {message}
         </div>
       ) : null}
 
-      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-          <div>
-            <p className="text-sm font-medium text-slate-500">LinkedIn</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-              Social promotion account
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Connect LinkedIn so the pipeline can create promotion posts after
-              dev.to syndication.
-            </p>
-            {linkedInConnection ? (
-              <div className="mt-4 grid gap-1 text-sm text-slate-600">
-                <p>
-                  Connected as{" "}
-                  <span className="font-semibold text-slate-950">
-                    {linkedInConnection.displayName || linkedInConnection.email || "LinkedIn member"}
-                  </span>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {cards.map((card) => (
+          <section
+            className="rounded-lg border border-white/10 bg-[#141414] p-5"
+            key={card.title}
+          >
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+                  {card.eyebrow}
                 </p>
-                <p>Token expires: {formatDate(linkedInConnection.expiresAt)}</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">{card.title}</h2>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">{card.detail}</p>
+                {card.meta ? (
+                  <p className="mt-2 text-sm text-zinc-500">{card.meta}</p>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-          <a
-            className="inline-flex h-10 w-fit items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-            href="/api/oauth/linkedin/start"
-          >
-            {linkedInConnection ? "Reconnect LinkedIn" : "Connect LinkedIn"}
-          </a>
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-          <div>
-            <p className="text-sm font-medium text-slate-500">Bluesky</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-              Short-form social account
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Bluesky uses a handle and app password from environment variables,
-              so there is no OAuth connect button.
-            </p>
-            <div className="mt-4 grid gap-1 text-sm text-slate-600">
-              <p>
-                Status:{" "}
-                <span className="font-semibold text-slate-950">
-                  {blueskyConfigured ? "Configured" : "Missing env vars"}
-                </span>
-              </p>
-              {blueskyHandle ? (
-                <p>
-                  Handle:{" "}
-                  <span className="font-semibold text-slate-950">{blueskyHandle}</span>
-                </p>
-              ) : null}
+              <span
+                className={`w-fit rounded-md px-3 py-1 text-xs font-semibold ${
+                  card.tone === "ready"
+                    ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30"
+                    : "bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/30"
+                }`}
+              >
+                {card.status}
+              </span>
             </div>
-          </div>
-          <span
-            className={`inline-flex h-10 w-fit items-center rounded-md px-4 text-sm font-semibold ${
-              blueskyConfigured
-                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-            }`}
-          >
-            {blueskyConfigured ? "Ready" : "Needs setup"}
-          </span>
-        </div>
-      </section>
-    </main>
+            {card.action ? <div className="mt-5">{card.action}</div> : null}
+          </section>
+        ))}
+      </div>
+    </AdminShell>
   );
 }

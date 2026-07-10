@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db, formatDate } from "@content-pipeline/db";
 import type { SubscriberStatus } from "@content-pipeline/db";
-import { signOut } from "../auth/sign-out/actions";
+import { AdminShell } from "../components/AdminShell";
 import { updateSubscriberStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +23,10 @@ const statusLabels: Record<SubscriberStatus | "ALL", string> = {
 };
 
 const statusStyles: Record<SubscriberStatus, string> = {
-  ACTIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  PENDING: "bg-amber-50 text-amber-700 ring-amber-200",
-  UNSUBSCRIBED: "bg-slate-100 text-slate-600 ring-slate-200",
-  BOUNCED: "bg-red-50 text-red-700 ring-red-200",
+  ACTIVE: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+  PENDING: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
+  UNSUBSCRIBED: "bg-white/10 text-zinc-300 ring-white/10",
+  BOUNCED: "bg-red-500/15 text-red-300 ring-red-400/30",
 };
 
 type SubscribersPageProps = {
@@ -67,38 +67,12 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
   const totalCount = counts.reduce((total, count) => total + count._count.status, 0);
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 py-8">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
-        <div>
-          <Link className="text-sm font-medium text-slate-500" href="/">
-            Dashboard
-          </Link>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">
-            Subscribers
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            {countMap.get("ACTIVE") || 0} active of {totalCount} total subscribers.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700"
-            href="/posts"
-          >
-            Posts
-          </Link>
-          <form action={signOut}>
-            <button
-              className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-              type="submit"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <AdminShell
+      description="Review confirmed readers, pending confirmations, unsubscribe state, and acquisition source."
+      eyebrow="Audience"
+      title="Subscribers"
+    >
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {statuses.map((item) => {
           const href = item === "ALL" ? "/subscribers" : `/subscribers?status=${item}`;
           const count = item === "ALL" ? totalCount : countMap.get(item) || 0;
@@ -106,30 +80,30 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
 
           return (
             <Link
-              className={`rounded-lg border p-4 ${
+              className={`rounded-lg border p-4 transition ${
                 selected
-                  ? "border-slate-950 bg-white"
-                  : "border-slate-200 bg-white text-slate-600"
+                  ? "border-orange-400 bg-orange-500 text-black"
+                  : "border-white/10 bg-[#141414] text-zinc-300 hover:border-orange-400"
               }`}
               href={href}
               key={item}
             >
-              <p className="text-sm font-medium">{statusLabels[item]}</p>
-              <p className="mt-2 text-2xl font-semibold tracking-tight">{count}</p>
+              <p className="text-sm font-semibold">{statusLabels[item]}</p>
+              <p className="mt-2 text-2xl font-semibold">{count}</p>
             </Link>
           );
         })}
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
         {subscribers.length === 0 ? (
-          <div className="p-8 text-slate-600">
+          <div className="p-8 text-zinc-400">
             No subscribers match this view yet.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <table className="min-w-full divide-y divide-white/10 text-sm">
+              <thead className="bg-black/40 text-left text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
                 <tr>
                   <th className="px-5 py-3">Subscriber</th>
                   <th className="px-5 py-3">Status</th>
@@ -139,13 +113,13 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-white/10">
                 {subscribers.map((subscriber) => (
-                  <tr key={subscriber.id}>
+                  <tr className="text-zinc-300" key={subscriber.id}>
                     <td className="px-5 py-4 align-top">
-                      <p className="font-semibold text-slate-950">{subscriber.email}</p>
+                      <p className="font-semibold text-white">{subscriber.email}</p>
                       {subscriber.referrerUrl ? (
-                        <p className="mt-1 max-w-sm truncate text-xs text-slate-500">
+                        <p className="mt-1 max-w-sm truncate text-xs text-zinc-500">
                           {subscriber.referrerUrl}
                         </p>
                       ) : null}
@@ -157,13 +131,9 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
                         {statusLabels[subscriber.status]}
                       </span>
                     </td>
-                    <td className="px-5 py-4 align-top text-slate-600">
-                      {subscriber.source || "Unknown"}
-                    </td>
-                    <td className="px-5 py-4 align-top text-slate-600">
-                      {formatDate(subscriber.createdAt)}
-                    </td>
-                    <td className="px-5 py-4 align-top text-slate-600">
+                    <td className="px-5 py-4 align-top">{subscriber.source || "Unknown"}</td>
+                    <td className="px-5 py-4 align-top">{formatDate(subscriber.createdAt)}</td>
+                    <td className="px-5 py-4 align-top">
                       {subscriber.confirmedAt ? formatDate(subscriber.confirmedAt) : "Not yet"}
                     </td>
                     <td className="px-5 py-4 align-top">
@@ -172,7 +142,7 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
                           <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
                             <input name="status" type="hidden" value="ACTIVE" />
                             <button
-                              className="inline-flex h-9 items-center rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700"
+                              className="inline-flex h-9 items-center rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300"
                               type="submit"
                             >
                               Activate
@@ -183,7 +153,7 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
                           <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
                             <input name="status" type="hidden" value="UNSUBSCRIBED" />
                             <button
-                              className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white"
+                              className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-semibold text-black"
                               type="submit"
                             >
                               Unsubscribe
@@ -199,6 +169,6 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
           </div>
         )}
       </section>
-    </main>
+    </AdminShell>
   );
 }

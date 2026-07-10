@@ -1,93 +1,163 @@
 import Link from "next/link";
 import { db, formatDate, readyPostStatuses } from "@content-pipeline/db";
-import { signOut } from "../auth/sign-out/actions";
+import { AdminShell, PrimaryLink, SecondaryLink } from "../components/AdminShell";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPostsPage() {
+type AdminPostsPageProps = {
+  searchParams: Promise<{
+    status?: string;
+  }>;
+};
+
+const statusFilters = [
+  "ALL",
+  "DRAFT_READY",
+  "READY_TO_PUBLISH",
+  "PUBLISHED_BLOG",
+  "PUBLISHED_DEVTO",
+  "COMPLETE",
+];
+
+export default async function AdminPostsPage({ searchParams }: AdminPostsPageProps) {
+  const { status } = await searchParams;
+  const selectedStatus =
+    status && statusFilters.includes(status) && status !== "ALL" ? status : undefined;
+
   const posts = await db.post.findMany({
-    orderBy: [{ updatedAt: "desc" }],
+    where: selectedStatus
+      ? {
+          status: selectedStatus as never,
+        }
+      : undefined,
+    orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
     include: {
       publications: true,
+      promotionAssets: true,
     },
   });
 
+  const allCounts = await db.post.groupBy({
+    by: ["status"],
+    _count: {
+      status: true,
+    },
+  });
+
+  const countMap = new Map(allCounts.map((item) => [item.status, item._count.status]));
   const readyCount = posts.filter((post) =>
     readyPostStatuses.includes(post.status),
   ).length;
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 py-8">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
-        <div>
-          <Link className="text-sm font-medium text-slate-500" href="/">
-            Dashboard
-          </Link>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">Posts</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Ready buffer: {readyCount} / 20
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <form action={signOut}>
-            <button
-              className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700"
-              type="submit"
+    <AdminShell
+      actions={
+        <>
+          <PrimaryLink href="/posts/new">New post</PrimaryLink>
+          <SecondaryLink href="/topics">Topics</SecondaryLink>
+        </>
+      }
+      description="Review canonical posts, create dev.to drafts, generate promotion copy, and keep the ready buffer healthy."
+      eyebrow="Publishing"
+      title="Posts"
+    >
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {statusFilters.map((item) => {
+          const href = item === "ALL" ? "/posts" : `/posts?status=${item}`;
+          const active = item === "ALL" ? !selectedStatus : selectedStatus === item;
+          const count =
+            item === "ALL"
+              ? allCounts.reduce((total, count) => total + count._count.status, 0)
+              : countMap.get(item as never) || 0;
+
+          return (
+            <Link
+              className={`rounded-lg border p-4 transition ${
+                active
+                  ? "border-orange-400 bg-orange-500 text-black"
+                  : "border-white/10 bg-[#141414] text-zinc-300 hover:border-orange-400"
+              }`}
+              href={href}
+              key={item}
             >
-              Sign out
-            </button>
-          </form>
-          <Link
-            className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-            href="/posts/new"
-          >
-            New post
-          </Link>
-        </div>
+              <p className="text-sm font-semibold">{item.replaceAll("_", " ")}</p>
+              <p className="mt-2 text-2xl font-semibold">{count}</p>
+            </Link>
+          );
+        })}
       </div>
 
-      <section className="mt-6 rounded-lg border border-slate-200 bg-white">
+      <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
+        <div className="flex flex-col justify-between gap-3 border-b border-white/10 p-5 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+              Ready buffer
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold text-white">
+              {readyCount} / 20 posts ready in this view
+            </h2>
+          </div>
+          <p className="text-sm text-zinc-400">
+            Select a row to edit, syndicate, and generate promotion copy.
+          </p>
+        </div>
         {posts.length === 0 ? (
-          <div className="p-8 text-slate-600">
-            No posts yet. Create a demo post or import the Substack archive.
+          <div className="p-8 text-zinc-400">
+            No posts match this view. Create a post or change the filter.
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
-            {posts.map((post) => (
-              <article className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between" key={post.id}>
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    <Link href={`/posts/${post.id}`}>{post.title}</Link>
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {post.status} · {formatDate(post.publishedAt || post.createdAt)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {post.publications
-                    .filter((publication) => publication.platform === "DEVTO")
-                    .map((publication) => (
+          <div className="divide-y divide-white/10">
+            {posts.map((post) => {
+              const devToPublication = post.publications.find(
+                (publication) => publication.platform === "DEVTO",
+              );
+              return (
+                <Link
+                  className="grid gap-4 p-5 transition hover:bg-white/[0.03] xl:grid-cols-[1fr_auto] xl:items-center"
+                  href={`/posts/${post.id}`}
+                  key={post.id}
+                >
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">{post.title}</h3>
+                    <p className="mt-2 text-sm text-zinc-400">
+                      {post.status.replaceAll("_", " ")} ·{" "}
+                      {formatDate(post.publishedAt || post.createdAt)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 xl:justify-end">
+                    {devToPublication ? (
+                      <span className="rounded-md bg-orange-500 px-2 py-1 text-xs font-semibold text-black">
+                        dev.to {devToPublication.status}
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
+                        dev.to not started
+                      </span>
+                    )}
+                    {post.promotionAssets.length > 0 ? (
+                      <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300">
+                        promo ready
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
+                        promo needed
+                      </span>
+                    )}
+                    {post.tags.slice(0, 2).map((tag) => (
                       <span
-                        className="rounded-md bg-slate-950 px-2 py-1 text-xs font-medium text-white"
-                        key={publication.id}
+                        className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300"
+                        key={tag}
                       >
-                        dev.to {publication.status}
+                        {tag}
                       </span>
                     ))}
-                  {post.tags.map((tag) => (
-                    <span
-                      className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600"
-                      key={tag}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
-    </main>
+    </AdminShell>
   );
 }

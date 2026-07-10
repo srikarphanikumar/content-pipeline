@@ -83,6 +83,12 @@ export default async function Home() {
             </h1>
           </div>
           <div className="flex items-center gap-2 text-sm">
+            <Link
+              className="rounded-md border border-slate-200 px-3 py-2 font-medium text-slate-700"
+              href="/settings"
+            >
+              Settings
+            </Link>
             <span className="rounded-md border border-slate-200 px-3 py-2 text-slate-600">
               MVP
             </span>

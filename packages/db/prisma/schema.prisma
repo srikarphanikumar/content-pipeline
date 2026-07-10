@@ -117,6 +117,21 @@ model PlatformPublication {
   @@unique([postId, platform])
 }
 
+model PlatformConnection {
+  id                String   @id @default(cuid())
+  platform          Platform @unique
+  providerAccountId String?
+  displayName       String?
+  email             String?
+  accessToken       String   @db.Text
+  refreshToken      String?  @db.Text
+  scope             String?
+  tokenType         String?
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 model Subscriber {
   id           String           @id @default(cuid())
   email        String           @unique

@@ -93,6 +93,7 @@ Core models currently exist for:
 - `Topic`
 - `Post`
 - `PlatformPublication`
+- `PlatformConnection`
 - `Subscriber`
 
 Important post fields:
@@ -218,6 +219,9 @@ Admin routes currently include:
 /posts/[id]
 /import/substack
 /subscribers
+/settings
+/api/oauth/linkedin/start
+/api/oauth/linkedin/callback
 ```
 
 Admin currently:
@@ -235,6 +239,7 @@ Admin currently:
 - Can view subscribers by status.
 - Can manually activate or unsubscribe subscribers.
 - Can create dev.to draft articles from post edit pages.
+- Can connect LinkedIn through OAuth and store the platform connection.
 
 ### 5. Neon Auth
 
@@ -258,6 +263,7 @@ Protected routes:
 /posts/*
 /import/*
 /subscribers/*
+/settings/*
 ```
 
 Things fixed during setup:
@@ -401,9 +407,18 @@ Still needed:
 - Publish live from admin after review.
 - Pull dev.to stats/status back into admin.
 
-### No Social Promotion Yet
+### Social Promotion Setup
 
-LinkedIn, Bluesky, Mastodon copy generation/posting is not implemented yet.
+LinkedIn OAuth setup is implemented. LinkedIn copy generation/posting, Bluesky, and Mastodon are not wired yet.
+
+Implemented:
+
+- LinkedIn connect route at `/api/oauth/linkedin/start`.
+- LinkedIn callback route at `/api/oauth/linkedin/callback`.
+- OAuth state validation cookie.
+- Token exchange and `/v2/userinfo` lookup.
+- LinkedIn connection storage in `PlatformConnection`.
+- Settings page at `/settings` with connect/reconnect status.
 
 Needed:
 
@@ -412,7 +427,8 @@ Needed:
 - First comment CTA generator.
 - Bluesky/Mastodon short post generator.
 - Manual copy initially.
-- API/browser automation later.
+- LinkedIn post API call after promotion copy is generated.
+- Bluesky/Mastodon connection setup.
 
 ### No AI Draft Generation Yet
 

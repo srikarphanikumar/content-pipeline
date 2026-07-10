@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, parseTags, slugify } from "@content-pipeline/db";
 import type { PostStatus } from "@content-pipeline/db";
+import { createDevToDraft } from "@/lib/devto";
 
 const statuses: PostStatus[] = [
   "IDEA",
@@ -87,6 +88,80 @@ export async function updatePost(postId: string, formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function createDevToDraftForPost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  const existingPublication = await db.platformPublication.findUnique({
+    where: {
+      postId_platform: {
+        postId,
+        platform: "DEVTO",
+      },
+    },
+  });
+
+  if (existingPublication?.externalId) {
+    throw new Error("This post already has a dev.to draft or publication.");
+  }
+
+  const publication = await db.platformPublication.upsert({
+    where: {
+      postId_platform: {
+        postId,
+        platform: "DEVTO",
+      },
+    },
+    create: {
+      postId,
+      platform: "DEVTO",
+      status: "GENERATED",
+    },
+    update: {
+      status: "GENERATED",
+      errorMessage: null,
+    },
+  });
+
+  try {
+    const devToArticle = await createDevToDraft(post);
+
+    await db.platformPublication.update({
+      where: {
+        id: publication.id,
+      },
+      data: {
+        status: "GENERATED",
+        externalId: String(devToArticle.id),
+        externalUrl: devToArticle.url || null,
+        errorMessage: null,
+      },
+    });
+  } catch (error) {
+    await db.platformPublication.update({
+      where: {
+        id: publication.id,
+      },
+      data: {
+        status: "FAILED",
+        errorMessage: error instanceof Error ? error.message : "Unknown dev.to error.",
+      },
+    });
+
+    throw error;
+  }
+
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
 }

@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function AdminPostsPage() {
   const posts = await db.post.findMany({
     orderBy: [{ updatedAt: "desc" }],
+    include: {
+      publications: true,
+    },
   });
 
   const readyCount = posts.filter((post) =>
@@ -61,6 +64,16 @@ export default async function AdminPostsPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {post.publications
+                    .filter((publication) => publication.platform === "DEVTO")
+                    .map((publication) => (
+                      <span
+                        className="rounded-md bg-slate-950 px-2 py-1 text-xs font-medium text-white"
+                        key={publication.id}
+                      >
+                        dev.to {publication.status}
+                      </span>
+                    ))}
                   {post.tags.map((tag) => (
                     <span
                       className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600"

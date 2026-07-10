@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@content-pipeline/db";
 import { PostForm } from "../PostForm";
-import { updatePost } from "../actions";
+import { createDevToDraftForPost, updatePost } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,9 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
     where: {
       id,
     },
+    include: {
+      publications: true,
+    },
   });
 
   if (!post) {
@@ -25,6 +28,10 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   }
 
   const updateAction = updatePost.bind(null, post.id);
+  const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
+  const devToPublication = post.publications.find(
+    (publication) => publication.platform === "DEVTO",
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-8">
@@ -47,6 +54,49 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
           Update the canonical copy and publishing status.
         </p>
       </header>
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-medium text-slate-500">dev.to</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+              Draft syndication
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Creates an unpublished dev.to draft with the blog URL as canonical
+              and a newsletter CTA appended.
+            </p>
+            {devToPublication?.errorMessage ? (
+              <p className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                {devToPublication.errorMessage}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-start gap-3 md:items-end">
+            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+              {devToPublication?.status || "NOT_STARTED"}
+            </span>
+            {devToPublication?.externalUrl ? (
+              <a
+                className="text-sm font-semibold text-slate-700 underline"
+                href={devToPublication.externalUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Open dev.to draft
+              </a>
+            ) : (
+              <form action={createDevToDraftAction}>
+                <button
+                  className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+                  type="submit"
+                >
+                  Create dev.to draft
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      </section>
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
         <PostForm action={updateAction} post={post} />
       </section>

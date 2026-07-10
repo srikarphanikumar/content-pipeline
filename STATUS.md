@@ -234,6 +234,7 @@ Admin currently:
 - Can import Substack content.
 - Can view subscribers by status.
 - Can manually activate or unsubscribe subscribers.
+- Can create dev.to draft articles from post edit pages.
 
 ### 5. Neon Auth
 
@@ -380,17 +381,24 @@ Needed:
 - Weekly digest email generation.
 - Manual send flow from admin.
 
-### No dev.to Publishing Yet
+### dev.to Draft Publishing
 
-The BRD calls for dev.to as the main discovery platform, but the dev.to API is not wired yet.
+The BRD calls for dev.to as the main discovery platform. Draft creation is now wired.
 
-Needed:
+Implemented:
 
-- `DEVTO_API_KEY`
-- dev.to adapter.
-- Publish as draft/live.
-- Store dev.to URL in `PlatformPublication`.
-- Generate canonical link / CTA.
+- `DEVTO_API_KEY` server action integration.
+- Draft-first `POST /api/articles` call.
+- Canonical URL set to `https://blog.mspk.me/posts/[slug]`.
+- Newsletter CTA appended to dev.to Markdown.
+- dev.to article id/url stored in `PlatformPublication`.
+- dev.to status badge on the admin posts list.
+
+Still needed:
+
+- Update existing dev.to drafts.
+- Publish live from admin after review.
+- Pull dev.to stats/status back into admin.
 
 ### No Social Promotion Yet
 

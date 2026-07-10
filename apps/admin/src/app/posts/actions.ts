@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db, parseTags, slugify } from "@content-pipeline/db";
 import type { PostStatus } from "@content-pipeline/db";
 import { createDevToDraft } from "@/lib/devto";
+import { generatePromotionCopy } from "@/lib/promotion";
 
 const statuses: PostStatus[] = [
   "IDEA",
@@ -163,5 +164,131 @@ export async function createDevToDraftForPost(postId: string) {
   }
 
   revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function generatePromotionAssetsForPost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  const promotionCopy = await generatePromotionCopy(post);
+
+  await Promise.all([
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "LINKEDIN_POST",
+        },
+      },
+      create: {
+        postId,
+        type: "LINKEDIN_POST",
+        content: promotionCopy.linkedInPost,
+      },
+      update: {
+        content: promotionCopy.linkedInPost,
+      },
+    }),
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "LINKEDIN_FIRST_COMMENT",
+        },
+      },
+      create: {
+        postId,
+        type: "LINKEDIN_FIRST_COMMENT",
+        content: promotionCopy.linkedInFirstComment,
+      },
+      update: {
+        content: promotionCopy.linkedInFirstComment,
+      },
+    }),
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "BLUESKY_POST",
+        },
+      },
+      create: {
+        postId,
+        type: "BLUESKY_POST",
+        content: promotionCopy.blueskyPost,
+      },
+      update: {
+        content: promotionCopy.blueskyPost,
+      },
+    }),
+  ]);
+
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function updatePromotionAssetsForPost(postId: string, formData: FormData) {
+  const linkedInPost = stringValue(formData, "linkedInPost");
+  const linkedInFirstComment = stringValue(formData, "linkedInFirstComment");
+  const blueskyPost = stringValue(formData, "blueskyPost");
+
+  await Promise.all([
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "LINKEDIN_POST",
+        },
+      },
+      create: {
+        postId,
+        type: "LINKEDIN_POST",
+        content: linkedInPost,
+      },
+      update: {
+        content: linkedInPost,
+      },
+    }),
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "LINKEDIN_FIRST_COMMENT",
+        },
+      },
+      create: {
+        postId,
+        type: "LINKEDIN_FIRST_COMMENT",
+        content: linkedInFirstComment,
+      },
+      update: {
+        content: linkedInFirstComment,
+      },
+    }),
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "BLUESKY_POST",
+        },
+      },
+      create: {
+        postId,
+        type: "BLUESKY_POST",
+        content: blueskyPost.slice(0, 300),
+      },
+      update: {
+        content: blueskyPost.slice(0, 300),
+      },
+    }),
+  ]);
+
   revalidatePath(`/posts/${postId}`);
 }

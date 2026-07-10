@@ -94,6 +94,7 @@ Core models currently exist for:
 - `Post`
 - `PlatformPublication`
 - `PlatformConnection`
+- `PromotionAsset`
 - `Subscriber`
 
 Important post fields:
@@ -240,6 +241,7 @@ Admin currently:
 - Can manually activate or unsubscribe subscribers.
 - Can create dev.to draft articles from post edit pages.
 - Can connect LinkedIn through OAuth and store the platform connection.
+- Can generate and edit LinkedIn/Bluesky promotion copy from post edit pages.
 
 ### 5. Neon Auth
 
@@ -409,7 +411,7 @@ Still needed:
 
 ### Social Promotion Setup
 
-LinkedIn OAuth setup is implemented. LinkedIn copy generation/posting, Bluesky, and Mastodon are not wired yet.
+LinkedIn OAuth setup and promotion copy generation are implemented. Bluesky env setup is visible in settings. Posting to LinkedIn/Bluesky and Mastodon are not wired yet.
 
 Implemented:
 
@@ -419,15 +421,15 @@ Implemented:
 - Token exchange and `/v2/userinfo` lookup.
 - LinkedIn connection storage in `PlatformConnection`.
 - Settings page at `/settings` with connect/reconnect status.
+- Bluesky settings card based on `BLUESKY_HANDLE` and `BLUESKY_APP_PASSWORD`.
+- OpenAI promotion copy generator.
+- Promotion assets stored in `PromotionAsset`.
+- Editable LinkedIn post, LinkedIn first comment, and Bluesky post drafts.
 
 Needed:
 
-- Promotion asset model or fields.
-- LinkedIn post generator.
-- First comment CTA generator.
-- Bluesky/Mastodon short post generator.
-- Manual copy initially.
 - LinkedIn post API call after promotion copy is generated.
+- Bluesky post API call after promotion copy is generated.
 - Bluesky/Mastodon connection setup.
 
 ### No AI Draft Generation Yet

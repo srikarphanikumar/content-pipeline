@@ -46,6 +46,12 @@ enum SubscriberStatus {
   BOUNCED
 }
 
+enum PromotionAssetType {
+  LINKEDIN_POST
+  LINKEDIN_FIRST_COMMENT
+  BLUESKY_POST
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -97,6 +103,7 @@ model Post {
   topic    Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
   publications PlatformPublication[]
+  promotionAssets PromotionAsset[]
 }
 
 model PlatformPublication {
@@ -130,6 +137,19 @@ model PlatformConnection {
   expiresAt         DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+model PromotionAsset {
+  id        String             @id @default(cuid())
+  type      PromotionAssetType
+  content   String             @db.Text
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, type])
 }
 
 model Subscriber {

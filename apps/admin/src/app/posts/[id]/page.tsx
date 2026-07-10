@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@content-pipeline/db";
 import { PostForm } from "../PostForm";
-import { createDevToDraftForPost, updatePost } from "../actions";
+import {
+  createDevToDraftForPost,
+  generatePromotionAssetsForPost,
+  updatePost,
+  updatePromotionAssetsForPost,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +25,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
     },
     include: {
       publications: true,
+      promotionAssets: true,
     },
   });
 
@@ -29,9 +35,15 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
 
   const updateAction = updatePost.bind(null, post.id);
   const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
+  const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
+  const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
   const devToPublication = post.publications.find(
     (publication) => publication.platform === "DEVTO",
   );
+  const promotionAssets = new Map(
+    post.promotionAssets.map((asset) => [asset.type, asset.content]),
+  );
+  const hasPromotionAssets = post.promotionAssets.length > 0;
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl px-6 py-8">
@@ -114,6 +126,64 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
             )}
           </div>
         </div>
+      </section>
+      <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Promotion</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+              Social copy
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Generate LinkedIn and Bluesky copy from the canonical post. Review
+              and edit before publishing anywhere.
+            </p>
+          </div>
+          <form action={generatePromotionAction}>
+            <button
+              className="inline-flex h-10 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+              type="submit"
+            >
+              {hasPromotionAssets ? "Regenerate copy" : "Generate copy"}
+            </button>
+          </form>
+        </div>
+
+        {hasPromotionAssets ? (
+          <form action={updatePromotionAction} className="mt-6 grid gap-5">
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              LinkedIn post
+              <textarea
+                className="min-h-48 rounded-md border border-slate-300 px-3 py-3 text-sm leading-6 text-slate-950"
+                name="linkedInPost"
+                defaultValue={promotionAssets.get("LINKEDIN_POST") || ""}
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              LinkedIn first comment
+              <textarea
+                className="min-h-24 rounded-md border border-slate-300 px-3 py-3 text-sm leading-6 text-slate-950"
+                name="linkedInFirstComment"
+                defaultValue={promotionAssets.get("LINKEDIN_FIRST_COMMENT") || ""}
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              Bluesky post
+              <textarea
+                className="min-h-24 rounded-md border border-slate-300 px-3 py-3 text-sm leading-6 text-slate-950"
+                maxLength={300}
+                name="blueskyPost"
+                defaultValue={promotionAssets.get("BLUESKY_POST") || ""}
+              />
+            </label>
+            <button
+              className="h-10 w-fit rounded-md border border-slate-300 px-4 text-sm font-semibold text-slate-700"
+              type="submit"
+            >
+              Save copy edits
+            </button>
+          </form>
+        ) : null}
       </section>
       <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
         <PostForm action={updateAction} post={post} />

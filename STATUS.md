@@ -391,6 +391,7 @@ Implemented:
 - Draft-first `POST /api/articles` call.
 - Canonical URL set to `https://blog.mspk.me/posts/[slug]`.
 - Newsletter CTA appended to dev.to Markdown.
+- Cover image sent to dev.to when `coverImageUrl` exists.
 - dev.to article id/url stored in `PlatformPublication`.
 - dev.to status badge on the admin posts list.
 

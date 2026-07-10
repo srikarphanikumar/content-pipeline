@@ -43,6 +43,7 @@ export function buildDevToArticle(post: Post) {
     tags: devToTags(post.tags),
     canonical_url: postUrl(post),
     description: post.description || post.subtitle || undefined,
+    main_image: post.coverImageUrl || undefined,
   };
 }
 

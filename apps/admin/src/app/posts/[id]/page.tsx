@@ -63,7 +63,8 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Creates an unpublished dev.to draft with the blog URL as canonical
-              and a newsletter CTA appended.
+              and a newsletter CTA appended. Cover images are sent when the post
+              has one.
             </p>
             {devToPublication?.errorMessage ? (
               <p className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">

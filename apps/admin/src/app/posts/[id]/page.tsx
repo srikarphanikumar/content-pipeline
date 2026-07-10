@@ -70,20 +70,37 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 {devToPublication.errorMessage}
               </p>
             ) : null}
+            {devToPublication?.externalUrl ? (
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                dev.to does not serve draft URLs publicly. Open your dev.to
+                dashboard to review the draft; this public URL will work after
+                publishing.
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
               {devToPublication?.status || "NOT_STARTED"}
             </span>
             {devToPublication?.externalUrl ? (
-              <a
-                className="text-sm font-semibold text-slate-700 underline"
-                href={devToPublication.externalUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                Open dev.to draft
-              </a>
+              <div className="flex flex-col items-start gap-2 md:items-end">
+                <a
+                  className="text-sm font-semibold text-slate-700 underline"
+                  href="https://dev.to/dashboard"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open dev.to dashboard
+                </a>
+                <a
+                  className="text-xs font-medium text-slate-500 underline"
+                  href={devToPublication.externalUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Public URL after publish
+                </a>
+              </div>
             ) : (
               <form action={createDevToDraftAction}>
                 <button

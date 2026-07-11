@@ -8,7 +8,7 @@ import { fetchBlueskyStats, fetchDevToStats } from "@/lib/platform-stats";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { inngest } from "./client";
 
-const activeTopicTarget = 100;
+const activeTopicTarget = 50;
 const draftReadyTarget = 20;
 const maxDraftsPerRun = 2;
 

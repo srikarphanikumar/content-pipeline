@@ -388,8 +388,8 @@ export async function generateNextBacklogTopicsFromForm() {
   redirect(`/topics?${params.toString()}`);
 }
 
-export async function generateBacklogTopics(requestedCount = 100): Promise<TopicGenerationResult> {
-  const normalizedRequestedCount = Math.min(Math.max(Math.round(requestedCount), 1), 100);
+export async function generateBacklogTopics(requestedCount = 20): Promise<TopicGenerationResult> {
+  const normalizedRequestedCount = Math.min(Math.max(Math.round(requestedCount), 1), 50);
   const [publishedPosts, queuePosts, existingTopics] = await Promise.all([
     db.post.findMany({
       where: {
@@ -450,7 +450,7 @@ export async function generateBacklogTopics(requestedCount = 100): Promise<Topic
   if (apiKey) {
     const openai = new OpenAI({ apiKey });
     try {
-      const openAiTargetCount = Math.min(40, normalizedRequestedCount);
+      const openAiTargetCount = Math.min(20, normalizedRequestedCount);
       const response = await openai.chat.completions.create(
         {
           model: "gpt-4.1-mini",

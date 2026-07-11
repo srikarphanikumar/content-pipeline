@@ -3,7 +3,7 @@ import { generateBacklogTopics } from "@/app/topics/actions";
 
 export async function POST(request: Request) {
   try {
-    let count = 100;
+    let count = 20;
 
     try {
       const body = (await request.json()) as { count?: unknown };

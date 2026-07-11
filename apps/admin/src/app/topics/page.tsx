@@ -101,7 +101,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-orange-100/80">
             This checks the published archive, the current queue, and existing
-            backlog titles, then fills toward a 100-topic idea bank.
+            backlog titles, then fills toward a 50-topic idea bank in quick batches.
           </p>
           <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
@@ -120,7 +120,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             className="h-11 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
             pendingLabel="Suggesting..."
           >
-            Fill topic bank
+            Add topic batch
           </SubmitButton>
         </form>
       </section>

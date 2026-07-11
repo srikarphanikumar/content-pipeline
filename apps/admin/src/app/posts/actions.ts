@@ -781,19 +781,15 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
     });
   }
 
-  if (publications.get("LINKEDIN") !== "PUBLISHED") {
-    tasks.push({
-      platform: "LINKEDIN",
-      run: () => publishLinkedInPromotionForPost(postId),
-    });
-  }
+  tasks.push({
+    platform: "LINKEDIN",
+    run: () => publishLinkedInPromotionForPost(postId),
+  });
 
-  if (publications.get("BLUESKY") !== "PUBLISHED") {
-    tasks.push({
-      platform: "BLUESKY",
-      run: () => publishBlueskyPromotionForPost(postId),
-    });
-  }
+  tasks.push({
+    platform: "BLUESKY",
+    run: () => publishBlueskyPromotionForPost(postId),
+  });
 
   if (tasks.length === 0) {
     revalidatePath("/posts");

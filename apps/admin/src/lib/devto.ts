@@ -93,6 +93,10 @@ export async function publishDevToArticle(post: Post, articleId?: string | null)
     },
   );
 
+  if (articleId && response.status === 404) {
+    return publishDevToArticle(post);
+  }
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`dev.to publish returned ${response.status}: ${errorText}`);

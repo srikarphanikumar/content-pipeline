@@ -167,9 +167,14 @@ export async function publishBlueskyPost(text: string) {
   }
 
   const record = (await response.json()) as BlueskyCreateRecordResponse;
+  const externalUrl = blueskyPostUrl(session.handle, record.uri);
+
+  if (!record.uri || !externalUrl) {
+    throw new Error("Bluesky accepted the request but returned no post URL. The post was not marked published.");
+  }
 
   return {
     externalId: record.uri,
-    externalUrl: blueskyPostUrl(session.handle, record.uri),
+    externalUrl,
   };
 }

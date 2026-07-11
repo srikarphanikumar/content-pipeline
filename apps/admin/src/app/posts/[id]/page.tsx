@@ -63,6 +63,10 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const blueskyPublication = post.publications.find(
     (publication) => publication.platform === "BLUESKY",
   );
+  const hasPublishedSocial =
+    linkedInPublication?.status === "PUBLISHED" ||
+    blueskyPublication?.status === "PUBLISHED" ||
+    devToPublication?.status === "PUBLISHED";
   const promotionAssets = new Map(
     post.promotionAssets.map((asset) => [asset.type, asset.content]),
   );
@@ -150,7 +154,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 className="inline-flex h-10 items-center rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
                 pendingLabel="Posting..."
               >
-                Post to socials
+                {hasPublishedSocial ? "Retry socials" : "Post to socials"}
               </SubmitButton>
             </form>
           ) : hasPromotionAssets ? (

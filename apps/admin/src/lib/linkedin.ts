@@ -223,8 +223,12 @@ export async function publishLinkedInPost({
 
   const postUrn = response.headers.get("x-restli-id");
 
+  if (!postUrn) {
+    throw new Error("LinkedIn accepted the request but returned no post id. The post was not marked published.");
+  }
+
   return {
     externalId: postUrn,
-    externalUrl: postUrn ? linkedInPostUrl(postUrn) : null,
+    externalUrl: linkedInPostUrl(postUrn),
   };
 }

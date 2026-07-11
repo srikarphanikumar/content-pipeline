@@ -1,6 +1,8 @@
 import { db } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink } from "../components/AdminShell";
+import { CopyButton } from "../components/CopyButton";
 import { SubmitButton } from "../components/SubmitButton";
+import { CaptureTopicModal } from "./CaptureTopicModal";
 import {
   createDraftPostFromTopic,
   createTopic,
@@ -70,6 +72,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const activeTopics = topics.filter((topic) => topic.status !== "done");
   const doneTopics = topics.filter((topic) => topic.status === "done");
   const backlogCount = topics.filter((topic) => topic.status === "backlog").length;
+  const topicTitleText = activeTopics.map((topic) => topic.title).join("\n");
 
   const counts = statuses.map((status) => ({
     status,
@@ -91,19 +94,19 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         </div>
       ) : null}
 
-      <section className="mb-6 grid gap-4 rounded-lg border border-orange-400/30 bg-orange-500/10 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+      <section className="mb-4 rounded-lg border border-orange-400/30 bg-orange-500/10 p-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-300">
             Next-topic engine
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">
+          <h2 className="mt-1 text-xl font-semibold text-white">
             Build the backlog from what already shipped
           </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-orange-100/80">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-orange-100/80">
             This checks the published archive, the current queue, and existing
             backlog titles, then fills toward a 50-topic idea bank in quick batches.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
               Published archive: {publishedPostCount}
             </span>
@@ -115,135 +118,55 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             </span>
           </div>
         </div>
+      </section>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-[#141414] p-3">
         <form action={generateNextBacklogTopicsFromForm}>
           <SubmitButton
-            className="h-11 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
-            pendingLabel="Suggesting..."
+            className="h-9 rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Adding..."
           >
             Add topic batch
           </SubmitButton>
         </form>
-      </section>
+        <form action={selectAllBacklogTopics}>
+          <SubmitButton
+            className="h-9 rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Selecting..."
+          >
+            Move all to selected ({backlogCount})
+          </SubmitButton>
+        </form>
+        <CaptureTopicModal action={createTopic} statuses={statuses} />
+        <CopyButton
+          className="h-9 rounded-md border border-white/10 px-3 text-xs font-semibold text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
+          value={topicTitleText}
+        >
+          Copy all topic titles
+        </CopyButton>
+        <form action={clearAllTopics} className="ml-auto">
+          <SubmitButton
+            className="h-9 rounded-md border border-red-400 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Clearing..."
+          >
+            Clear all
+          </SubmitButton>
+        </form>
+      </div>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-2 md:grid-cols-5">
         {counts.map((item) => (
           <section
-            className="rounded-lg border border-white/10 bg-[#141414] p-4"
+            className="rounded-lg border border-white/10 bg-[#141414] p-3"
             key={item.status}
           >
             <p className="text-sm capitalize text-zinc-400">{item.status}</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{item.count}</p>
+            <p className="mt-1 text-2xl font-semibold text-white">{item.count}</p>
           </section>
         ))}
       </div>
 
-      <section className="mt-6 flex flex-col justify-between gap-3 rounded-lg border border-white/10 bg-[#141414] p-5 md:flex-row md:items-center">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-            Bulk planning
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-white">
-            Move generated backlog into selection
-          </h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Selection means these ideas are candidates for draft generation.
-          </p>
-        </div>
-        <form action={selectAllBacklogTopics}>
-          <SubmitButton
-            className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
-            pendingLabel="Selecting..."
-          >
-            Move all backlog to selected ({backlogCount})
-          </SubmitButton>
-        </form>
-      </section>
-
-      <section className="mt-6 flex flex-col justify-between gap-3 rounded-lg border border-red-400/30 bg-red-500/10 p-5 md:flex-row md:items-center">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-red-300">
-            Reset backlog
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-white">
-            Clear all topics
-          </h2>
-          <p className="mt-2 text-sm text-red-100/75">
-            Deletes every topic. Existing posts stay in the post queue, but lose
-            their topic link.
-          </p>
-        </div>
-        <form action={clearAllTopics}>
-          <SubmitButton
-            className="h-10 rounded-md border border-red-400 px-4 text-sm font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
-            pendingLabel="Clearing..."
-          >
-            Clear all topics
-          </SubmitButton>
-        </form>
-      </section>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[0.42fr_0.58fr]">
-        <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-            Add topic
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">
-            Capture a new idea
-          </h2>
-          <form action={createTopic} className="mt-5 grid gap-4">
-            <label className="grid gap-2 text-sm font-semibold text-zinc-300">
-              Title
-              <input
-                className="h-11 rounded-md border border-white/10 bg-black px-3 text-white outline-none ring-orange-500/20 focus:ring-4"
-                name="title"
-                required
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-zinc-300">
-              Notes
-              <textarea
-                className="min-h-28 rounded-md border border-white/10 bg-black px-3 py-3 text-white outline-none ring-orange-500/20 focus:ring-4"
-                name="description"
-              />
-            </label>
-            <div className="grid gap-3 md:grid-cols-3">
-              {[
-                ["noveltyScore", "Novelty"],
-                ["audienceFit", "Audience"],
-                ["difficulty", "Difficulty"],
-              ].map(([name, label]) => (
-                <label className="grid gap-2 text-sm font-semibold text-zinc-300" key={name}>
-                  {label}
-                  <input
-                    className="h-11 rounded-md border border-white/10 bg-black px-3 text-white outline-none ring-orange-500/20 focus:ring-4"
-                    max={10}
-                    min={1}
-                    name={name}
-                    type="number"
-                  />
-                </label>
-              ))}
-            </div>
-            <label className="grid gap-2 text-sm font-semibold text-zinc-300">
-              Status
-              <select
-                className="h-11 rounded-md border border-white/10 bg-black px-3 text-white outline-none ring-orange-500/20 focus:ring-4"
-                name="status"
-                defaultValue="backlog"
-              >
-                {statuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <SubmitButton pendingLabel="Adding...">
-              Add topic
-            </SubmitButton>
-          </form>
-        </section>
-
+      <div className="mt-4">
         <section className="overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
           {activeTopics.length === 0 ? (
             <div className="p-8 text-zinc-400">
@@ -252,10 +175,12 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
           ) : (
             <div className="divide-y divide-white/10">
               {activeTopics.map((topic) => (
-                <article className="grid gap-4 p-5 xl:grid-cols-[1fr_auto]" key={topic.id}>
+                <article className="grid gap-3 px-4 py-3 xl:grid-cols-[1fr_auto]" key={topic.id}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-semibold text-white">{topic.title}</h2>
+                      <h2 className="text-base font-semibold text-white md:text-lg">
+                        {topic.title}
+                      </h2>
                       <span
                         className={`rounded-md px-2 py-1 text-xs font-semibold ${statusStyles[topic.status] || statusStyles.backlog}`}
                       >
@@ -263,11 +188,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                       </span>
                     </div>
                     {topic.description ? (
-                      <p className="mt-2 text-sm leading-6 text-zinc-400">
+                      <p className="mt-1 max-w-5xl text-sm leading-6 text-zinc-400">
                         {topic.description}
                       </p>
                     ) : null}
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-zinc-300">
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-zinc-300">
                       <span className="rounded-md bg-white/10 px-2 py-1">
                         Novelty {topic.noveltyScore || "-"}
                       </span>
@@ -290,10 +215,10 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                       ) : null}
                     </div>
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                    <form action={updateTopicStatus.bind(null, topic.id)} className="flex gap-2">
+                  <div className="flex flex-wrap items-start gap-2 xl:max-w-md xl:justify-end">
+                    <form action={updateTopicStatus.bind(null, topic.id)} className="flex gap-1">
                       <select
-                        className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
+                        className="h-9 rounded-md border border-white/10 bg-black px-2 text-xs text-white"
                         name="status"
                         defaultValue={topic.status}
                       >
@@ -304,7 +229,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                         ))}
                       </select>
                       <SubmitButton
-                        className="h-10 rounded-md border border-orange-400 px-3 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                        className="h-9 rounded-md border border-orange-400 px-2.5 text-xs font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
                         pendingLabel="Saving..."
                       >
                         Save
@@ -312,14 +237,17 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                     </form>
                     {topic.posts.length === 0 ? (
                       <form action={createDraftPostFromTopic.bind(null, topic.id)}>
-                        <SubmitButton pendingLabel="Generating draft...">
-                          Create draft post
+                        <SubmitButton
+                          className="h-9 rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+                          pendingLabel="Drafting..."
+                        >
+                          Draft
                         </SubmitButton>
                       </form>
                     ) : null}
-                    <details className="rounded-md border border-white/10 bg-black/30 p-3">
-                      <summary className="cursor-pointer text-sm font-semibold text-zinc-300">
-                        Edit idea
+                    <details className="w-full rounded-md border border-white/10 bg-black/30 p-2 xl:basis-full">
+                      <summary className="cursor-pointer text-xs font-semibold text-zinc-300">
+                        Edit
                       </summary>
                       <form action={updateTopic.bind(null, topic.id)} className="mt-4 grid gap-3">
                         <label className="grid gap-1 text-xs font-semibold text-zinc-400">
@@ -385,10 +313,10 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                     </details>
                     <form action={deleteTopic.bind(null, topic.id)}>
                       <SubmitButton
-                        className="h-10 rounded-md border border-red-400 px-3 text-sm font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                        className="h-9 rounded-md border border-red-400 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
                         pendingLabel="Deleting..."
                       >
-                        Delete idea
+                        Delete
                       </SubmitButton>
                     </form>
                   </div>

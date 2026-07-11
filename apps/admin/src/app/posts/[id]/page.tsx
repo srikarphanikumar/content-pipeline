@@ -11,6 +11,7 @@ import {
   generatePromotionAssetsForPost,
   publishBlueskyPromotionForPost,
   publishLinkedInPromotionForPost,
+  recreateDevToDraftForPost,
   updatePost,
   updatePromotionAssetsForPost,
 } from "../actions";
@@ -41,6 +42,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
 
   const updateAction = updatePost.bind(null, post.id);
   const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
+  const recreateDevToDraftAction = recreateDevToDraftForPost.bind(null, post.id);
   const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
   const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
   const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
@@ -221,7 +223,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
               </p>
             ) : null}
             <div className="mt-5 flex flex-wrap gap-2">
-              {devToPublication?.externalUrl ? (
+              {devToPublication?.externalId || devToPublication?.externalUrl ? (
                 <>
                   <a
                     className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black"
@@ -231,14 +233,24 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                   >
                     Open dev.to dashboard
                   </a>
-                  <a
-                    className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
-                    href={devToPublication.externalUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Public URL after publish
-                  </a>
+                  {devToPublication.externalUrl ? (
+                    <a
+                      className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
+                      href={devToPublication.externalUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Public URL after publish
+                    </a>
+                  ) : null}
+                  <form action={recreateDevToDraftAction}>
+                    <SubmitButton
+                      className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black"
+                      pendingLabel="Recreating..."
+                    >
+                      Recreate dev.to draft
+                    </SubmitButton>
+                  </form>
                 </>
               ) : (
                 <form action={createDevToDraftAction}>

@@ -268,6 +268,31 @@ export async function createDevToDraftForPost(postId: string) {
   revalidatePath(`/posts/${postId}`);
 }
 
+export async function recreateDevToDraftForPost(postId: string) {
+  await db.platformPublication.upsert({
+    where: {
+      postId_platform: {
+        postId,
+        platform: "DEVTO",
+      },
+    },
+    create: {
+      postId,
+      platform: "DEVTO",
+      status: "NOT_STARTED",
+    },
+    update: {
+      status: "NOT_STARTED",
+      externalId: null,
+      externalUrl: null,
+      errorMessage: null,
+      publishedAt: null,
+    },
+  });
+
+  await createDevToDraftForPost(postId);
+}
+
 export async function generatePromotionAssetsForPost(postId: string) {
   const post = await db.post.findUnique({
     where: {

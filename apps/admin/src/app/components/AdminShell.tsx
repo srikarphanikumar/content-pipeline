@@ -39,19 +39,19 @@ export function AdminShell({
   return (
     <main className="min-h-screen bg-[#080808] text-[#f7f2ea]">
       <header className="border-b border-white/10 bg-[#0d0d0d]">
-        <div className="mx-auto flex max-w-[96rem] flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mx-auto flex max-w-[96rem] flex-col gap-3 px-6 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <Link className="text-sm font-semibold text-orange-400" href="/">
               Under The Hood
             </Link>
-            <p className="mt-1 text-xl font-semibold tracking-tight text-white">
+            <p className="text-lg font-semibold tracking-tight text-white">
               Content Pipeline
             </p>
           </div>
           <nav className="flex flex-wrap items-center gap-2 text-sm">
             {navItems.map((item) => (
               <Link
-                className="rounded-md border border-white/10 px-3 py-2 font-semibold text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
+                className="rounded-md border border-white/10 px-3 py-1.5 font-semibold text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
                 href={item.href}
                 key={item.href}
               >
@@ -59,7 +59,7 @@ export function AdminShell({
               </Link>
             ))}
             <a
-              className="rounded-md border border-white/10 px-3 py-2 font-semibold text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
+              className="rounded-md border border-white/10 px-3 py-1.5 font-semibold text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
               href="https://blog.mspk.me"
               rel="noreferrer"
               target="_blank"
@@ -68,7 +68,7 @@ export function AdminShell({
             </a>
             <form action={signOut}>
               <SubmitButton
-                className="rounded-md bg-orange-500 px-3 py-2 font-semibold text-black transition hover:bg-orange-400"
+                className="rounded-md bg-orange-500 px-3 py-1.5 font-semibold text-black transition hover:bg-orange-400"
                 pendingLabel="Signing out..."
               >
                 Sign out
@@ -76,10 +76,10 @@ export function AdminShell({
             </form>
           </nav>
         </div>
-        <div className="mx-auto flex max-w-[96rem] gap-2 overflow-x-auto px-6 pb-4 text-xs font-semibold">
+        <div className="mx-auto flex max-w-[96rem] gap-2 overflow-x-auto px-6 pb-3 text-xs font-semibold">
           {workflowItems.map((item) => (
             <Link
-              className="shrink-0 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
+              className="shrink-0 rounded-md border border-white/10 bg-black/25 px-2.5 py-1.5 text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
               href={item.href}
               key={item.label}
             >
@@ -90,16 +90,16 @@ export function AdminShell({
       </header>
 
       <section className="border-b border-white/10 bg-[#111111]">
-        <div className="mx-auto flex max-w-[96rem] flex-col gap-4 px-6 py-8 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mx-auto flex max-w-[96rem] flex-col gap-3 px-6 py-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-400">
               {eyebrow}
             </p>
-            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white md:text-5xl">
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-white md:text-4xl">
               {title}
             </h1>
             {description ? (
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-300">
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">
                 {description}
               </p>
             ) : null}
@@ -108,7 +108,7 @@ export function AdminShell({
         </div>
       </section>
 
-      <section className="mx-auto max-w-[96rem] px-6 py-6">{children}</section>
+      <section className="mx-auto max-w-[96rem] px-6 py-4">{children}</section>
     </main>
   );
 }

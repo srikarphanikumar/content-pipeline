@@ -17,6 +17,33 @@ const linkedInMessages: Record<string, string> = {
   "invalid-state": "LinkedIn connection failed state validation. Try connecting again.",
 };
 
+async function getWhatsAppDeliveries() {
+  try {
+    const deliveries = await db.notificationDelivery.findMany({
+      where: {
+        channel: "WHATSAPP",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 8,
+    });
+
+    return {
+      deliveries,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Failed to load WhatsApp delivery log", error);
+
+    return {
+      deliveries: [],
+      error:
+        "Delivery log is not available yet. Run the latest database migration and redeploy.",
+    };
+  }
+}
+
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const { linkedin } = await searchParams;
   const linkedInConnection = await db.platformConnection.findUnique({
@@ -38,15 +65,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       process.env.TWILIO_MORNING_TEMPLATE_SID &&
       process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
   );
-  const whatsappDeliveries = await db.notificationDelivery.findMany({
-    where: {
-      channel: "WHATSAPP",
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 8,
-  });
+  const { deliveries: whatsappDeliveries, error: whatsappDeliveryError } =
+    await getWhatsAppDeliveries();
 
   const cards = [
     {
@@ -167,6 +187,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </div>
           <p className="text-sm text-zinc-500">Latest 8 sends from Twilio/Inngest tests.</p>
         </div>
+
+        {whatsappDeliveryError ? (
+          <div className="mt-4 rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+            {whatsappDeliveryError}
+          </div>
+        ) : null}
 
         <div className="mt-5 overflow-hidden rounded-lg border border-white/10">
           <table className="min-w-full divide-y divide-white/10 text-sm">

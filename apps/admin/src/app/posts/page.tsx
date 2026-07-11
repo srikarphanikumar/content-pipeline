@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { db, formatDate, readyPostStatuses } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink, SecondaryLink } from "../components/AdminShell";
+import { SubmitButton } from "../components/SubmitButton";
+import { clearPipelineQueue, deletePipelinePost } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +92,13 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
     ["archive", "Imported archive", viewCounts[1], "/posts?view=archive"],
     ["all", "All posts", viewCounts[2], "/posts?view=all"],
   ];
+  const queuePostIds = new Set(
+    selectedView === "queue"
+      ? posts
+          .filter((post) => post.sourcePlatform !== "SUBSTACK")
+          .map((post) => post.id)
+      : [],
+  );
 
   return (
     <AdminShell
@@ -103,13 +112,13 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
       eyebrow="Publishing"
       title={selectedView === "archive" ? "Imported archive" : selectedView === "all" ? "All posts" : "Post queue"}
     >
-      <div className="mb-6 grid gap-3 md:grid-cols-3">
+      <div className="mb-3 flex flex-wrap gap-2">
         {viewTabs.map(([key, label, count, href]) => {
           const active = selectedView === key;
 
           return (
             <Link
-              className={`rounded-lg border p-4 transition ${
+              className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
                 active
                   ? "border-orange-400 bg-orange-500 text-black"
                   : "border-white/10 bg-[#141414] text-zinc-300 hover:border-orange-400"
@@ -117,14 +126,14 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
               href={String(href)}
               key={String(key)}
             >
-              <p className="text-sm font-semibold">{label}</p>
-              <p className="mt-2 text-2xl font-semibold">{count}</p>
+              <span>{label}</span>
+              <span className={active ? "text-black/70" : "text-zinc-500"}>{count}</span>
             </Link>
           );
         })}
       </div>
 
-      <section className="mb-6 grid gap-3 rounded-lg border border-white/10 bg-[#141414] p-5 lg:grid-cols-5">
+      <section className="mb-3 flex flex-wrap gap-2 rounded-lg border border-white/10 bg-[#141414] px-3 py-2">
         {[
           ["1", "Draft", "Write or import the canonical post."],
           ["2", "Cover", "Generate the feed image."],
@@ -132,17 +141,18 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
           ["4", "Promote", "Generate social copy."],
           ["5", "Post", "Publish LinkedIn and Bluesky."],
         ].map(([step, label, detail]) => (
-          <div className="rounded-md border border-white/10 bg-black/30 p-3" key={step}>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-400">
-              Step {step}
-            </p>
-            <h2 className="mt-2 font-semibold text-white">{label}</h2>
-            <p className="mt-1 text-sm leading-5 text-zinc-400">{detail}</p>
-          </div>
+          <span
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2.5 text-xs text-zinc-400"
+            key={step}
+            title={detail}
+          >
+            <span className="font-semibold text-orange-400">{step}</span>
+            <span className="font-semibold text-white">{label}</span>
+          </span>
         ))}
       </section>
 
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 flex flex-wrap gap-2">
         {statusFilters.map((item) => {
           const viewParam = selectedView === "queue" ? "" : `view=${selectedView}`;
           const statusParam = item === "ALL" ? "" : `status=${item}`;
@@ -156,7 +166,7 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
 
           return (
             <Link
-              className={`rounded-lg border p-4 transition ${
+              className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
                 active
                   ? "border-orange-400 bg-orange-500 text-black"
                   : "border-white/10 bg-[#141414] text-zinc-300 hover:border-orange-400"
@@ -164,26 +174,38 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
               href={href}
               key={item}
             >
-              <p className="text-sm font-semibold">{item.replaceAll("_", " ")}</p>
-              <p className="mt-2 text-2xl font-semibold">{count}</p>
+              <span>{item.replaceAll("_", " ")}</span>
+              <span className={active ? "text-black/70" : "text-zinc-500"}>{count}</span>
             </Link>
           );
         })}
       </div>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
-        <div className="flex flex-col justify-between gap-3 border-b border-white/10 p-5 md:flex-row md:items-center">
+      <section className="overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
+        <div className="flex flex-col justify-between gap-3 border-b border-white/10 px-4 py-3 md:flex-row md:items-center">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-400">
               Ready buffer
             </p>
-            <h2 className="mt-1 text-2xl font-semibold text-white">
+            <h2 className="mt-1 text-xl font-semibold text-white">
               {readyCount} / 20 posts ready in this view
             </h2>
           </div>
-          <p className="text-sm text-zinc-400">
-            Select a row to edit, syndicate, and generate promotion copy.
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-zinc-400">
+              Open a row to edit, syndicate, and promote.
+            </p>
+            {selectedView === "queue" ? (
+              <form action={clearPipelineQueue}>
+                <SubmitButton
+                  className="h-8 rounded-md border border-red-400 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                  pendingLabel="Clearing..."
+                >
+                  Clear queue
+                </SubmitButton>
+              </form>
+            ) : null}
+          </div>
         </div>
         {posts.length === 0 ? (
           <div className="p-8 text-zinc-400">
@@ -198,19 +220,43 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
                 (publication) => publication.platform === "DEVTO",
               );
               return (
-                <Link
-                  className="grid gap-4 p-5 transition hover:bg-white/[0.03] xl:grid-cols-[1fr_auto] xl:items-center"
-                  href={`/posts/${post.id}`}
+                <article
+                  className="grid gap-3 px-4 py-3 transition hover:bg-white/[0.03] xl:grid-cols-[1fr_auto] xl:items-center"
                   key={post.id}
                 >
                   <div>
-                    <h3 className="text-lg font-semibold text-white">{post.title}</h3>
-                    <p className="mt-2 text-sm text-zinc-400">
+                    <h3 className="text-lg font-semibold text-white">
+                      <Link className="hover:text-orange-300" href={`/posts/${post.id}`}>
+                        {post.title}
+                      </Link>
+                    </h3>
+                    <p className="mt-1 text-sm text-zinc-400">
                       {post.status.replaceAll("_", " ")} ·{" "}
                       {formatDate(post.publishedAt || post.createdAt)}
                     </p>
+                    {post.sourcePlatform === "SUBSTACK" ? (
+                      <p className="mt-2 w-fit rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300">
+                        Protected imported archive
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2 xl:justify-end">
+                    <Link
+                      className="inline-flex h-8 items-center rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400"
+                      href={`/posts/${post.id}`}
+                    >
+                      Open
+                    </Link>
+                    {queuePostIds.has(post.id) ? (
+                      <form action={deletePipelinePost.bind(null, post.id)}>
+                        <SubmitButton
+                          className="h-8 rounded-md border border-red-400 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                          pendingLabel="Deleting..."
+                        >
+                          Delete
+                        </SubmitButton>
+                      </form>
+                    ) : null}
                     {devToPublication ? (
                       <span className="rounded-md bg-orange-500 px-2 py-1 text-xs font-semibold text-black">
                         dev.to {devToPublication.status}
@@ -247,7 +293,7 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
                       </span>
                     ))}
                   </div>
-                </Link>
+                </article>
               );
             })}
           </div>

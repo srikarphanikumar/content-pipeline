@@ -5,8 +5,10 @@ import {
   createDraftPostFromTopic,
   createTopic,
   clearAllTopics,
+  deleteTopic,
   generateNextBacklogTopics,
   selectAllBacklogTopics,
+  updateTopic,
   updateTopicStatus,
 } from "./actions";
 
@@ -299,6 +301,80 @@ export default async function TopicsPage() {
                         </SubmitButton>
                       </form>
                     ) : null}
+                    <details className="rounded-md border border-white/10 bg-black/30 p-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-zinc-300">
+                        Edit idea
+                      </summary>
+                      <form action={updateTopic.bind(null, topic.id)} className="mt-4 grid gap-3">
+                        <label className="grid gap-1 text-xs font-semibold text-zinc-400">
+                          Title
+                          <input
+                            className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
+                            name="title"
+                            required
+                            defaultValue={topic.title}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-semibold text-zinc-400">
+                          Notes
+                          <textarea
+                            className="min-h-24 rounded-md border border-white/10 bg-black px-3 py-2 text-sm text-white"
+                            name="description"
+                            defaultValue={topic.description || ""}
+                          />
+                        </label>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {[
+                            ["noveltyScore", "Novelty", topic.noveltyScore],
+                            ["audienceFit", "Audience", topic.audienceFit],
+                            ["difficulty", "Difficulty", topic.difficulty],
+                          ].map(([name, label, value]) => (
+                            <label
+                              className="grid gap-1 text-xs font-semibold text-zinc-400"
+                              key={String(name)}
+                            >
+                              {label}
+                              <input
+                                className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
+                                max={10}
+                                min={1}
+                                name={String(name)}
+                                type="number"
+                                defaultValue={typeof value === "number" ? value : ""}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <label className="grid gap-1 text-xs font-semibold text-zinc-400">
+                          Status
+                          <select
+                            className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
+                            name="status"
+                            defaultValue={topic.status}
+                          >
+                            {statuses.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <SubmitButton
+                          className="h-10 rounded-md bg-orange-500 px-3 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+                          pendingLabel="Updating..."
+                        >
+                          Update idea
+                        </SubmitButton>
+                      </form>
+                    </details>
+                    <form action={deleteTopic.bind(null, topic.id)}>
+                      <SubmitButton
+                        className="h-10 rounded-md border border-red-400 px-3 text-sm font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                        pendingLabel="Deleting..."
+                      >
+                        Delete idea
+                      </SubmitButton>
+                    </form>
                   </div>
                 </article>
               ))}

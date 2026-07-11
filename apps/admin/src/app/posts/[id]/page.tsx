@@ -7,6 +7,7 @@ import { SubmitButton } from "../../components/SubmitButton";
 import { PostForm } from "../PostForm";
 import {
   createDevToDraftForPost,
+  deletePipelinePost,
   generateCoverImageForPost,
   generatePromotionAssetsForPost,
   publishBlueskyPromotionForPost,
@@ -41,6 +42,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   }
 
   const updateAction = updatePost.bind(null, post.id);
+  const deleteAction = deletePipelinePost.bind(null, post.id);
   const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
   const recreateDevToDraftAction = recreateDevToDraftForPost.bind(null, post.id);
   const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
@@ -65,6 +67,14 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const linkedInFirstComment = promotionAssets.get("LINKEDIN_FIRST_COMMENT") || "";
   const blueskyPost = promotionAssets.get("BLUESKY_POST") || "";
   const hasPromotionAssets = post.promotionAssets.length > 0;
+  const isProtectedImport = post.sourcePlatform === "SUBSTACK";
+  const isPipelineQueuePost = [
+    "IDEA",
+    "SELECTED",
+    "DRAFTING",
+    "DRAFT_READY",
+    "READY_TO_PUBLISH",
+  ].includes(post.status);
   const routeSteps = [
     {
       label: "Canonical",
@@ -154,6 +164,36 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
               </p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-lg border border-red-400/30 bg-red-500/10 p-5">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-red-300">
+              Record controls
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-white">
+              {isProtectedImport ? "Protected imported archive" : "Pipeline-owned post"}
+            </h2>
+            <p className="mt-2 text-sm text-red-100/75">
+              {isProtectedImport
+                ? "Imported Substack posts cannot be deleted from the admin app."
+                : isPipelineQueuePost
+                  ? "This post is still in the idea/draft/queue workflow and can be removed if it is no longer useful."
+                  : "Published or promoted posts are locked against deletion from this workflow."}
+            </p>
+          </div>
+          {!isProtectedImport && isPipelineQueuePost ? (
+            <form action={deleteAction}>
+              <SubmitButton
+                className="h-10 rounded-md border border-red-400 px-4 text-sm font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Deleting..."
+              >
+                Delete post
+              </SubmitButton>
+            </form>
+          ) : null}
         </div>
       </section>
 

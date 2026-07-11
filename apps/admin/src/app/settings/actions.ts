@@ -26,6 +26,16 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function recordDelivery(input: Parameters<typeof db.notificationDelivery.create>[0]["data"]) {
+  try {
+    await db.notificationDelivery.create({
+      data: input,
+    });
+  } catch (error) {
+    console.error("Failed to record WhatsApp delivery", error);
+  }
+}
+
 export async function sendTestWhatsAppNotification() {
   envSummary();
 
@@ -49,16 +59,14 @@ export async function sendTestWhatsAppNotification() {
     );
 
     if (!result.sent) {
-      await db.notificationDelivery.create({
-        data: {
-          bodyPreview: body,
-          channel: "WHATSAPP",
-          errorMessage: result.reason,
-          kind: "TEST",
-          recipient: process.env.WHATSAPP_TO as string,
-          status: "not_sent",
-          templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-        },
+      await recordDelivery({
+        bodyPreview: body,
+        channel: "WHATSAPP",
+        errorMessage: result.reason,
+        kind: "TEST",
+        recipient: process.env.WHATSAPP_TO as string,
+        status: "not_sent",
+        templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
       });
       revalidatePath("/settings");
       return;
@@ -67,30 +75,26 @@ export async function sendTestWhatsAppNotification() {
     await sleep(5000);
     const status = await fetchTwilioMessageStatus(result.sid);
 
-    await db.notificationDelivery.create({
-      data: {
-        bodyPreview: body,
-        channel: "WHATSAPP",
-        errorCode: status.errorCode,
-        errorMessage: status.errorMessage,
-        kind: "TEST",
-        messageSid: result.sid,
-        recipient: process.env.WHATSAPP_TO as string,
-        status: status.status,
-        templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-      },
+    await recordDelivery({
+      bodyPreview: body,
+      channel: "WHATSAPP",
+      errorCode: status.errorCode,
+      errorMessage: status.errorMessage,
+      kind: "TEST",
+      messageSid: result.sid,
+      recipient: process.env.WHATSAPP_TO as string,
+      status: status.status,
+      templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
     });
   } catch (error) {
-    await db.notificationDelivery.create({
-      data: {
-        bodyPreview: body,
-        channel: "WHATSAPP",
-        errorMessage: error instanceof Error ? error.message : "Unknown WhatsApp test error",
-        kind: "TEST",
-        recipient: process.env.WHATSAPP_TO || "unknown",
-        status: "failed",
-        templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-      },
+    await recordDelivery({
+      bodyPreview: body,
+      channel: "WHATSAPP",
+      errorMessage: error instanceof Error ? error.message : "Unknown WhatsApp test error",
+      kind: "TEST",
+      recipient: process.env.WHATSAPP_TO || "unknown",
+      status: "failed",
+      templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
     });
     throw error;
   }

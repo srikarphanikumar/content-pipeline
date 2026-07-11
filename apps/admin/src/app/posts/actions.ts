@@ -22,6 +22,13 @@ const statuses: PostStatus[] = [
   "PROMOTED_SOCIAL",
   "COMPLETE",
 ];
+const queueStatuses: PostStatus[] = [
+  "IDEA",
+  "SELECTED",
+  "DRAFTING",
+  "DRAFT_READY",
+  "READY_TO_PUBLISH",
+];
 
 function stringValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -165,6 +172,55 @@ export async function updatePost(postId: string, formData: FormData) {
   revalidatePath("/");
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
+}
+
+export async function deletePipelinePost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+    select: {
+      sourcePlatform: true,
+      status: true,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (post.sourcePlatform === "SUBSTACK") {
+    throw new Error("Imported Substack archive posts are protected and cannot be deleted.");
+  }
+
+  if (!queueStatuses.includes(post.status)) {
+    throw new Error("Only idea, draft, and queue posts can be deleted from the pipeline.");
+  }
+
+  await db.post.delete({
+    where: {
+      id: postId,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  redirect("/posts");
+}
+
+export async function clearPipelineQueue() {
+  await db.post.deleteMany({
+    where: {
+      sourcePlatform: null,
+      status: {
+        in: queueStatuses,
+      },
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath("/topics");
 }
 
 export async function generateCoverImageForPost(postId: string) {

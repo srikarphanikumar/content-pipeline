@@ -381,6 +381,43 @@ export async function updateTopicStatus(topicId: string, formData: FormData) {
   revalidatePath("/topics");
 }
 
+export async function updateTopic(topicId: string, formData: FormData) {
+  const title = stringValue(formData, "title");
+
+  if (!title) {
+    throw new Error("Topic title is required.");
+  }
+
+  await db.topic.update({
+    where: {
+      id: topicId,
+    },
+    data: {
+      title,
+      description: stringValue(formData, "description") || null,
+      noveltyScore: numberValue(formData, "noveltyScore"),
+      audienceFit: numberValue(formData, "audienceFit"),
+      difficulty: numberValue(formData, "difficulty"),
+      status: stringValue(formData, "status") || "backlog",
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/topics");
+}
+
+export async function deleteTopic(topicId: string) {
+  await db.topic.delete({
+    where: {
+      id: topicId,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/topics");
+  revalidatePath("/posts");
+}
+
 export async function selectAllBacklogTopics() {
   await db.topic.updateMany({
     where: {

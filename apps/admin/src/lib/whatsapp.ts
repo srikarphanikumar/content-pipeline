@@ -2,11 +2,19 @@ type WhatsAppResult =
   | {
       sent: true;
       sid: string;
+      status: string;
     }
   | {
       reason: string;
       sent: false;
     };
+
+export type TwilioMessageStatus = {
+  errorCode: string | null;
+  errorMessage: string | null;
+  sid: string;
+  status: string;
+};
 
 function twilioConfigured() {
   return Boolean(
@@ -66,6 +74,7 @@ export async function sendWhatsAppMessage(body: string): Promise<WhatsAppResult>
   return {
     sent: true,
     sid: result.sid || "",
+    status: "accepted",
   };
 }
 
@@ -105,7 +114,13 @@ export async function sendWhatsAppTemplate(
     },
   );
 
-  const result = (await response.json()) as { message?: string; sid?: string };
+  const result = (await response.json()) as {
+    error_code?: string | null;
+    error_message?: string | null;
+    message?: string;
+    sid?: string;
+    status?: string;
+  };
 
   if (!response.ok) {
     throw new Error(`Twilio WhatsApp template failed: ${response.status} ${result.message || ""}`);
@@ -114,5 +129,45 @@ export async function sendWhatsAppTemplate(
   return {
     sent: true,
     sid: result.sid || "",
+    status: result.status || "accepted",
+  };
+}
+
+export async function fetchTwilioMessageStatus(
+  messageSid: string,
+): Promise<TwilioMessageStatus> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+  if (!accountSid || !authToken) {
+    throw new Error("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN.");
+  }
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages/${messageSid}.json`,
+    {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+      },
+    },
+  );
+
+  const result = (await response.json()) as {
+    error_code?: string | null;
+    error_message?: string | null;
+    message?: string;
+    sid?: string;
+    status?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(`Twilio status fetch failed: ${response.status} ${result.message || ""}`);
+  }
+
+  return {
+    errorCode: result.error_code ? String(result.error_code) : null,
+    errorMessage: result.error_message || null,
+    sid: result.sid || messageSid,
+    status: result.status || "unknown",
   };
 }

@@ -46,6 +46,16 @@ enum SubscriberStatus {
   BOUNCED
 }
 
+enum NotificationChannel {
+  WHATSAPP
+}
+
+enum NotificationKind {
+  MORNING_SUMMARY
+  NIGHTLY_STATS
+  TEST
+}
+
 enum PromotionAssetType {
   LINKEDIN_POST
   LINKEDIN_FIRST_COMMENT
@@ -166,4 +176,22 @@ model Subscriber {
   unsubscribedAt DateTime?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
+}
+
+model NotificationDelivery {
+  id           String              @id @default(cuid())
+  channel      NotificationChannel
+  kind         NotificationKind
+  recipient    String
+  templateSid  String?
+  messageSid   String?
+  status       String
+  errorCode    String?
+  errorMessage String?             @db.Text
+  bodyPreview  String?             @db.Text
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([channel, createdAt])
+  @@index([messageSid])
 }

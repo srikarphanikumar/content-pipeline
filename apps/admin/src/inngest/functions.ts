@@ -30,6 +30,28 @@ function notificationDate() {
   }).format(new Date());
 }
 
+async function recordWhatsAppDelivery(input: {
+  bodyPreview: string;
+  errorMessage?: string | null;
+  kind: "MORNING_SUMMARY" | "NIGHTLY_STATS" | "TEST";
+  messageSid?: string | null;
+  status: string;
+  templateSid?: string;
+}) {
+  await db.notificationDelivery.create({
+    data: {
+      bodyPreview: input.bodyPreview,
+      channel: "WHATSAPP",
+      errorMessage: input.errorMessage || null,
+      kind: input.kind,
+      messageSid: input.messageSid || null,
+      recipient: process.env.WHATSAPP_TO || "unknown",
+      status: input.status,
+      templateSid: input.templateSid,
+    },
+  });
+}
+
 export const dailyPlanning = inngest.createFunction(
   {
     id: "daily-content-planning",
@@ -341,16 +363,37 @@ export const morningPublishingSummary = inngest.createFunction(
     ].join("\n");
     const body = `Under The Hood morning summary for ${notificationDate()}:\n\n${detail}\n\nReply STOP to opt out.`;
 
-    return step.run("Send WhatsApp morning summary", async () =>
-      sendWhatsAppTemplate(
+    return step.run("Send WhatsApp morning summary", async () => {
+      const result = await sendWhatsAppTemplate(
         process.env.TWILIO_MORNING_TEMPLATE_SID,
         {
           "1": notificationDate(),
           "2": detail,
         },
         body,
-      ),
-    );
+      );
+
+      if (!result.sent) {
+        await recordWhatsAppDelivery({
+          bodyPreview: body,
+          errorMessage: result.reason,
+          kind: "MORNING_SUMMARY",
+          status: "not_sent",
+          templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
+        });
+        throw new Error(result.reason);
+      }
+
+      await recordWhatsAppDelivery({
+        bodyPreview: body,
+        kind: "MORNING_SUMMARY",
+        messageSid: result.sid,
+        status: result.status,
+        templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
+      });
+
+      return result;
+    });
   },
 );
 
@@ -465,16 +508,37 @@ export const nightlyStatsAndTopics = inngest.createFunction(
     ].join("\n");
     const body = `Under The Hood nightly stats for ${notificationDate()}:\n\n${detail}\n\nReply STOP to opt out.`;
 
-    return step.run("Send WhatsApp nightly stats", async () =>
-      sendWhatsAppTemplate(
+    return step.run("Send WhatsApp nightly stats", async () => {
+      const result = await sendWhatsAppTemplate(
         process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
         {
           "1": notificationDate(),
           "2": detail,
         },
         body,
-      ),
-    );
+      );
+
+      if (!result.sent) {
+        await recordWhatsAppDelivery({
+          bodyPreview: body,
+          errorMessage: result.reason,
+          kind: "NIGHTLY_STATS",
+          status: "not_sent",
+          templateSid: process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
+        });
+        throw new Error(result.reason);
+      }
+
+      await recordWhatsAppDelivery({
+        bodyPreview: body,
+        kind: "NIGHTLY_STATS",
+        messageSid: result.sid,
+        status: result.status,
+        templateSid: process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
+      });
+
+      return result;
+    });
   },
 );
 

@@ -1,5 +1,7 @@
 import { db, formatDate } from "@content-pipeline/db";
 import { AdminShell } from "../components/AdminShell";
+import { SubmitButton } from "../components/SubmitButton";
+import { sendTestWhatsAppNotification } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,24 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const blueskyConfigured = Boolean(blueskyHandle && process.env.BLUESKY_APP_PASSWORD);
   const devToConfigured = Boolean(process.env.DEVTO_API_KEY);
   const openAiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const whatsAppConfigured = Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_MESSAGING_SERVICE_SID &&
+      process.env.TWILIO_WHATSAPP_FROM &&
+      process.env.WHATSAPP_TO &&
+      process.env.TWILIO_MORNING_TEMPLATE_SID &&
+      process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
+  );
+  const whatsappDeliveries = await db.notificationDelivery.findMany({
+    where: {
+      channel: "WHATSAPP",
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 8,
+  });
 
   const cards = [
     {
@@ -74,6 +94,23 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       meta: "Used server-side only.",
       action: null,
     },
+    {
+      title: "WhatsApp",
+      eyebrow: "Twilio",
+      status: whatsAppConfigured ? "Ready to test" : "Missing env vars",
+      tone: whatsAppConfigured ? "ready" : "warning",
+      detail: whatsAppConfigured
+        ? `Sending to ${process.env.WHATSAPP_TO}. Sender ${process.env.TWILIO_WHATSAPP_FROM}.`
+        : "Set Twilio credentials, Messaging Service SID, template SIDs, sender, and recipient.",
+      meta: process.env.TWILIO_MESSAGING_SERVICE_SID
+        ? `Messaging service: ${process.env.TWILIO_MESSAGING_SERVICE_SID}`
+        : "Template sends require TWILIO_MESSAGING_SERVICE_SID.",
+      action: (
+        <form action={sendTestWhatsAppNotification}>
+          <SubmitButton pendingLabel="Sending test...">Send test WhatsApp</SubmitButton>
+        </form>
+      ),
+    },
   ];
 
   return (
@@ -119,6 +156,66 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </section>
         ))}
       </div>
+
+      <section className="mt-6 rounded-lg border border-white/10 bg-[#141414] p-5">
+        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+              Delivery log
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">WhatsApp attempts</h2>
+          </div>
+          <p className="text-sm text-zinc-500">Latest 8 sends from Twilio/Inngest tests.</p>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-lg border border-white/10">
+          <table className="min-w-full divide-y divide-white/10 text-sm">
+            <thead className="bg-white/5 text-left text-xs uppercase tracking-[0.12em] text-zinc-500">
+              <tr>
+                <th className="px-4 py-3">Time</th>
+                <th className="px-4 py-3">Kind</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Twilio</th>
+                <th className="px-4 py-3">Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {whatsappDeliveries.length > 0 ? (
+                whatsappDeliveries.map((delivery) => (
+                  <tr key={delivery.id}>
+                    <td className="px-4 py-3 text-zinc-400">{formatDate(delivery.createdAt)}</td>
+                    <td className="px-4 py-3 text-zinc-300">{delivery.kind}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                          ["delivered", "sent", "queued", "accepted"].includes(delivery.status)
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : "bg-amber-500/15 text-amber-300"
+                        }`}
+                      >
+                        {delivery.status}
+                      </span>
+                    </td>
+                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-zinc-500">
+                      {delivery.messageSid || delivery.templateSid || "-"}
+                    </td>
+                    <td className="max-w-md px-4 py-3 text-zinc-400">
+                      {delivery.errorCode ? `${delivery.errorCode}: ` : ""}
+                      {delivery.errorMessage || "-"}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-4 py-6 text-center text-zinc-500" colSpan={5}>
+                    No WhatsApp delivery attempts recorded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </AdminShell>
   );
 }

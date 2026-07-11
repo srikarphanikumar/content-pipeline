@@ -44,5 +44,7 @@ export type {
   Post,
   PostStatus,
   PromotionAssetType,
+  NotificationChannel,
+  NotificationKind,
   SubscriberStatus,
 } from "@prisma/client";

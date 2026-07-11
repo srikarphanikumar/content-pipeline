@@ -17,6 +17,15 @@ function twilioConfigured() {
   );
 }
 
+function twilioTemplateConfigured() {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_MESSAGING_SERVICE_SID &&
+      process.env.WHATSAPP_TO,
+  );
+}
+
 function normalizeWhatsAppNumber(value: string) {
   return value.startsWith("whatsapp:") ? value : `whatsapp:${value}`;
 }
@@ -69,10 +78,10 @@ export async function sendWhatsAppTemplate(
     return sendWhatsAppMessage(fallbackBody);
   }
 
-  if (!twilioConfigured()) {
+  if (!twilioTemplateConfigured()) {
     return {
       reason:
-        "Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, or WHATSAPP_TO.",
+        "Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_MESSAGING_SERVICE_SID, or WHATSAPP_TO.",
       sent: false,
     };
   }
@@ -90,7 +99,7 @@ export async function sendWhatsAppTemplate(
       body: new URLSearchParams({
         ContentSid: contentSid,
         ContentVariables: JSON.stringify(variables),
-        From: normalizeWhatsAppNumber(process.env.TWILIO_WHATSAPP_FROM as string),
+        MessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID as string,
         To: normalizeWhatsAppNumber(process.env.WHATSAPP_TO as string),
       }),
     },

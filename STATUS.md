@@ -475,6 +475,7 @@ Implemented:
 - Backlog topics can be bulk-moved to `selected`.
 - A topic can now create a linked draft post and redirect into the post workspace.
 - Draft generation uses OpenAI when available and a structured fallback draft otherwise.
+- Draft generation now samples published post excerpts and prompts for a 1200-1800 word, human, Under The Hood voice.
 - Daily Inngest function tops up active backlog topics when the count drops below 20.
 
 Needed:

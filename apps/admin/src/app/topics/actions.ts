@@ -125,25 +125,29 @@ function draftFallback(topic: {
     description,
     tags: ["Frontend", "JavaScript", "Software Engineering"],
     bodyMarkdown: [
-      `# ${topic.title}`,
-      "",
-      "## Hook",
-      "",
       description,
       "",
-      "## Why this matters",
+      "At first, this looks like one of those small implementation details you can ignore.",
       "",
-      "Explain the production problem this creates and why surface-level abstractions hide the underlying mechanism.",
+      "Then it shows up in production.",
       "",
-      "## Under the hood",
+      "Something gets slower. Or flickers. Or works in Chrome but not Safari. Or behaves perfectly in development and falls apart once real users touch it.",
       "",
-      "Break down the runtime, browser, framework, or system behavior step by step.",
+      "That is usually the sign that the abstraction is hiding a real mechanism underneath.",
       "",
-      "## Debugging model",
+      "#### What is actually happening",
       "",
-      "Show how an engineer should reason about symptoms, traces, logs, and edge cases.",
+      "The important thing is not the API surface. The important thing is the sequence of work the browser or runtime has to do.",
       "",
-      "## Practical takeaways",
+      "Once you understand that sequence, the bug becomes much less mysterious.",
+      "",
+      "#### The debugging model",
+      "",
+      "Start by asking what changed, where the work moved, and whether the thing you are looking at is happening on the main thread, the network, the browser engine, or your framework.",
+      "",
+      "That mental model is usually more useful than memorizing one more rule.",
+      "",
+      "#### The practical takeaway",
       "",
       "- Identify the core mechanism.",
       "- Name the tradeoff.",
@@ -151,6 +155,17 @@ function draftFallback(topic: {
       "- Decide what to optimize and what to leave alone.",
     ].join("\n"),
   };
+}
+
+function cleanGeneratedDraft(value: string) {
+  return value
+    .replace(/—/g, ", ")
+    .replace(/–/g, "-")
+    .replace(/^# .+\n+/, "")
+    .replace(/\n#{1,2} Conclusion\b[\s\S]*$/i, "")
+    .replace(/\n#{1,2} References\b[\s\S]*$/i, "")
+    .replace(/\n#{1,2} Further Reading\b[\s\S]*$/i, "")
+    .trim();
 }
 
 function parseGeneratedDraft(value: string, topic: { title: string; description: string | null }) {
@@ -173,7 +188,7 @@ function parseGeneratedDraft(value: string, topic: { title: string; description:
     tags: tags.slice(0, 8),
     bodyMarkdown:
       typeof parsed.bodyMarkdown === "string" && parsed.bodyMarkdown.trim()
-        ? parsed.bodyMarkdown.trim()
+        ? cleanGeneratedDraft(parsed.bodyMarkdown)
         : fallback.bodyMarkdown,
   };
 }
@@ -420,19 +435,24 @@ export async function createDraftPostFromTopic(topicId: string) {
       select: {
         title: true,
         description: true,
+        bodyMarkdown: true,
         tags: true,
       },
     });
+    const styleExamples = publishedPosts.slice(0, 6).map((post) => ({
+      title: post.title,
+      excerpt: post.bodyMarkdown.slice(0, 1800),
+    }));
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      temperature: 0.7,
+      temperature: 0.75,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "You write first drafts for Under The Hood, a technical publication for frontend, JavaScript, full-stack, browser internals, performance, and AI engineers. Return only valid JSON.",
+            "You write first drafts for Under The Hood, a technical publication by Srikar Phani Kumar. Return only valid JSON. The voice is human, curious, practical, and conversational, not corporate or academic.",
         },
         {
           role: "user",
@@ -440,7 +460,24 @@ export async function createDraftPostFromTopic(topicId: string) {
             "Create a strong first-draft article from this topic.",
             "",
             "Return JSON with exactly these keys: title, subtitle, description, tags, bodyMarkdown.",
-            "The bodyMarkdown should be a complete technical draft of 1200-1800 words with headings, concrete mechanisms, debugging models, and practical takeaways.",
+            "",
+            "Voice and style rules:",
+            "- Match the style of the example posts below.",
+            "- Start from a familiar developer moment, bug, surprise, or tiny annoyance. Do not start with a broad textbook introduction.",
+            "- Write like a human engineer explaining something they personally debugged or finally understood.",
+            "- Use short paragraphs. Keep the rhythm punchy.",
+            "- Use 'you' naturally.",
+            "- Explain the mechanism under the hood, but avoid sounding like documentation.",
+            "- Prefer concrete examples over abstract claims.",
+            "- Do not include a top-level H1 in bodyMarkdown. The app already renders the title.",
+            "- Use #### headings, not numbered sections.",
+            "- Do not include a References section.",
+            "- Do not include a generic Conclusion heading.",
+            "- Avoid em dashes entirely.",
+            "- Avoid AI-ish phrases like 'delve into', 'unpack', 'paradigm shift', 'robust', 'seamless', 'crucial', 'in today's fast-paced', 'at the heart of', 'game changer'.",
+            "- Aim for 1200-1800 words. It should feel like a real Under The Hood deep dive, not a short note.",
+            "- Use enough sections, examples, and caveats to make the mechanism useful, but do not pad.",
+            "- The goal is a useful human first draft, not a finished encyclopedia entry.",
             "Do not duplicate the titles or angles in the already-published posts.",
             "",
             "Topic:",
@@ -453,7 +490,16 @@ export async function createDraftPostFromTopic(topicId: string) {
             }),
             "",
             "Already published posts:",
-            JSON.stringify(publishedPosts),
+            JSON.stringify(
+              publishedPosts.map((post) => ({
+                title: post.title,
+                description: post.description,
+                tags: post.tags,
+              })),
+            ),
+            "",
+            "Style examples from published posts:",
+            JSON.stringify(styleExamples),
           ].join("\n"),
         },
       ],

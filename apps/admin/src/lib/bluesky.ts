@@ -9,6 +9,25 @@ type BlueskyCreateRecordResponse = {
   cid: string;
 };
 
+type BlueskyFacet = {
+  index: {
+    byteStart: number;
+    byteEnd: number;
+  };
+  features: Array<
+    | {
+        $type: "app.bsky.richtext.facet#link";
+        uri: string;
+      }
+    | {
+        $type: "app.bsky.richtext.facet#tag";
+        tag: string;
+      }
+  >;
+};
+
+const textEncoder = new TextEncoder();
+
 function requiredEnv(name: string) {
   const value = process.env[name];
 
@@ -48,11 +67,82 @@ function blueskyPostUrl(handle: string, uri: string) {
   return `https://bsky.app/profile/${handle}/post/${rkey}`;
 }
 
+function byteIndex(value: string, index: number) {
+  return textEncoder.encode(value.slice(0, index)).length;
+}
+
+function stripTrailingUrlPunctuation(value: string) {
+  return value.replace(/[),.;:!?]+$/g, "");
+}
+
+function richTextFacets(text: string) {
+  const facets: BlueskyFacet[] = [];
+  const occupiedRanges: Array<{ start: number; end: number }> = [];
+
+  for (const match of text.matchAll(/https?:\/\/[^\s]+/g)) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    const uri = stripTrailingUrlPunctuation(match[0]);
+    const start = match.index;
+    const end = start + uri.length;
+
+    occupiedRanges.push({ start, end });
+    facets.push({
+      index: {
+        byteStart: byteIndex(text, start),
+        byteEnd: byteIndex(text, end),
+      },
+      features: [
+        {
+          $type: "app.bsky.richtext.facet#link",
+          uri,
+        },
+      ],
+    });
+  }
+
+  for (const match of text.matchAll(/(^|[\s(])#([\p{L}\p{N}_]+)/gu)) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    const prefix = match[1] || "";
+    const tag = match[2];
+    const start = match.index + prefix.length;
+    const end = start + tag.length + 1;
+    const overlapsLink = occupiedRanges.some(
+      (range) => start < range.end && end > range.start,
+    );
+
+    if (overlapsLink) {
+      continue;
+    }
+
+    facets.push({
+      index: {
+        byteStart: byteIndex(text, start),
+        byteEnd: byteIndex(text, end),
+      },
+      features: [
+        {
+          $type: "app.bsky.richtext.facet#tag",
+          tag,
+        },
+      ],
+    });
+  }
+
+  return facets;
+}
+
 export async function publishBlueskyPost(text: string) {
   if (!text.trim()) {
     throw new Error("Bluesky post copy is required.");
   }
 
+  const trimmedText = text.trim().slice(0, 300);
   const session = await createBlueskySession();
   const response = await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
     method: "POST",
@@ -65,7 +155,8 @@ export async function publishBlueskyPost(text: string) {
       collection: "app.bsky.feed.post",
       record: {
         $type: "app.bsky.feed.post",
-        text: text.trim().slice(0, 300),
+        text: trimmedText,
+        facets: richTextFacets(trimmedText),
         createdAt: new Date().toISOString(),
       },
     }),

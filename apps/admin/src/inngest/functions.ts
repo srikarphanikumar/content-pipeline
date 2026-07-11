@@ -55,7 +55,7 @@ async function recordWhatsAppDelivery(input: {
 export const dailyPlanning = inngest.createFunction(
   {
     id: "daily-content-planning",
-    triggers: [{ cron: "0 11 * * *" }],
+    triggers: [{ cron: "TZ=America/New_York 0 8 * * 1-5" }],
   },
   async ({ step }) => {
     const before = await step.run("Count current pipeline state", async () => {
@@ -124,7 +124,7 @@ export const dailyPlanning = inngest.createFunction(
 export const dailyDraftBuffer = inngest.createFunction(
   {
     id: "daily-draft-buffer",
-    triggers: [{ cron: "30 11 * * *" }],
+    triggers: [{ cron: "TZ=America/New_York 30 8 * * 1-5" }],
   },
   async ({ step }) => {
     const before = await step.run("Count draft buffer", async () => {
@@ -252,7 +252,7 @@ export const dailyDraftBuffer = inngest.createFunction(
 export const morningPublishingSummary = inngest.createFunction(
   {
     id: "morning-publishing-summary",
-    triggers: [{ cron: "0 12 * * *" }],
+    triggers: [{ cron: "TZ=America/New_York 0 9 * * 1-5" }],
   },
   async ({ step }) => {
     const summary = await step.run("Build morning publishing summary", async () => {
@@ -400,7 +400,7 @@ export const morningPublishingSummary = inngest.createFunction(
 export const nightlyStatsAndTopics = inngest.createFunction(
   {
     id: "nightly-stats-and-topic-prep",
-    triggers: [{ cron: "0 1 * * *" }],
+    triggers: [{ cron: "TZ=America/New_York 0 21 * * 1-5" }],
   },
   async ({ step }) => {
     const posts = await step.run("Find published/promoted posts for stats", async () =>

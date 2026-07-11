@@ -6,7 +6,7 @@ import { db, parseTags, slugify } from "@content-pipeline/db";
 import type { Platform, PostStatus, PromotionAssetType } from "@content-pipeline/db";
 import { publishBlueskyPost } from "@/lib/bluesky";
 import { generateAndStoreCoverImage } from "@/lib/cover-image";
-import { createDevToDraft } from "@/lib/devto";
+import { createDevToDraft, publishDevToArticle } from "@/lib/devto";
 import { publishLinkedInPost } from "@/lib/linkedin";
 import { generatePromotionCopy } from "@/lib/promotion";
 
@@ -129,6 +129,26 @@ async function markPlatformPublicationFailed(publicationId: string, error: unkno
       errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
     },
   });
+}
+
+async function isCanonicalBlogPublished(postId: string, status: PostStatus) {
+  if (blogPublishedStatuses.includes(status)) {
+    return true;
+  }
+
+  const publication = await db.platformPublication.findUnique({
+    where: {
+      postId_platform: {
+        postId,
+        platform: "BLOG",
+      },
+    },
+    select: {
+      status: true,
+    },
+  });
+
+  return publication?.status === "PUBLISHED";
 }
 
 export async function createPost(formData: FormData) {
@@ -431,6 +451,61 @@ export async function recreateDevToDraftForPost(postId: string) {
   await createDevToDraftForPost(postId);
 }
 
+async function publishDevToSyndicationForPost(postId: string) {
+  const [post, existingPublication] = await Promise.all([
+    db.post.findUnique({
+      where: {
+        id: postId,
+      },
+    }),
+    db.platformPublication.findUnique({
+      where: {
+        postId_platform: {
+          postId,
+          platform: "DEVTO",
+        },
+      },
+    }),
+  ]);
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (existingPublication?.status === "PUBLISHED") {
+    return {
+      skipped: true,
+    };
+  }
+
+  const publication = await startPlatformPublication(postId, "DEVTO");
+
+  try {
+    const result = await publishDevToArticle(post, existingPublication?.externalId);
+
+    await markPlatformPublicationPublished(publication.id, {
+      externalId: String(result.id),
+      externalUrl: result.url || existingPublication?.externalUrl || null,
+    });
+
+    await db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "PUBLISHED_DEVTO",
+      },
+    });
+
+    return {
+      skipped: false,
+    };
+  } catch (error) {
+    await markPlatformPublicationFailed(publication.id, error);
+    throw error;
+  }
+}
+
 export async function generatePromotionAssetsForPost(postId: string) {
   const post = await db.post.findUnique({
     where: {
@@ -632,4 +707,86 @@ export async function publishBlueskyPromotionForPost(postId: string) {
 
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
+}
+
+export async function publishSyndicationAndSocialsForPost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+    include: {
+      publications: true,
+      promotionAssets: true,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (!(await isCanonicalBlogPublished(postId, post.status))) {
+    throw new Error("Publish the canonical blog post before posting to socials.");
+  }
+
+  const publications = new Map(
+    post.publications.map((publication) => [publication.platform, publication.status]),
+  );
+  const tasks: Array<Promise<unknown>> = [];
+
+  if (publications.get("DEVTO") !== "PUBLISHED") {
+    tasks.push(publishDevToSyndicationForPost(postId));
+  }
+
+  if (publications.get("LINKEDIN") !== "PUBLISHED") {
+    tasks.push(publishLinkedInPromotionForPost(postId));
+  }
+
+  if (publications.get("BLUESKY") !== "PUBLISHED") {
+    tasks.push(publishBlueskyPromotionForPost(postId));
+  }
+
+  if (tasks.length === 0) {
+    revalidatePath("/posts");
+    revalidatePath(`/posts/${postId}`);
+    return;
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const failures = results.filter((result) => result.status === "rejected");
+
+  const publishedCount = await db.platformPublication.count({
+    where: {
+      postId,
+      platform: {
+        in: ["DEVTO", "LINKEDIN", "BLUESKY"],
+      },
+      status: "PUBLISHED",
+    },
+  });
+
+  if (publishedCount >= 3) {
+    await db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "COMPLETE",
+      },
+    });
+  }
+
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+
+  if (failures.length > 0) {
+    throw new Error(
+      failures
+        .map((failure) =>
+          failure.status === "rejected" && failure.reason instanceof Error
+            ? failure.reason.message
+            : "Unknown publishing error",
+        )
+        .join("\n"),
+    );
+  }
 }

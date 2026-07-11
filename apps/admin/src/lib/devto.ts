@@ -35,10 +35,27 @@ function devToBody(post: Post) {
   return `${post.bodyMarkdown.trim()}\n\n${cta}`;
 }
 
-export function buildDevToArticle(post: Post) {
+function devToApiKey() {
+  const apiKey = process.env.DEVTO_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("DEVTO_API_KEY is required for dev.to publishing.");
+  }
+
+  return apiKey;
+}
+
+function devToHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "api-key": devToApiKey(),
+  };
+}
+
+export function buildDevToArticle(post: Post, options?: { published?: boolean }) {
   return {
     title: post.title,
-    published: false,
+    published: options?.published ?? false,
     body_markdown: devToBody(post),
     tags: devToTags(post.tags),
     canonical_url: postUrl(post),
@@ -48,18 +65,9 @@ export function buildDevToArticle(post: Post) {
 }
 
 export async function createDevToDraft(post: Post) {
-  const apiKey = process.env.DEVTO_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("DEVTO_API_KEY is required to create a dev.to draft.");
-  }
-
   const response = await fetch("https://dev.to/api/articles", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": apiKey,
-    },
+    headers: devToHeaders(),
     body: JSON.stringify({
       article: buildDevToArticle(post),
     }),
@@ -68,6 +76,26 @@ export async function createDevToDraft(post: Post) {
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`dev.to returned ${response.status}: ${errorText}`);
+  }
+
+  return (await response.json()) as DevToArticleResponse;
+}
+
+export async function publishDevToArticle(post: Post, articleId?: string | null) {
+  const response = await fetch(
+    articleId ? `https://dev.to/api/articles/${articleId}` : "https://dev.to/api/articles",
+    {
+      method: articleId ? "PUT" : "POST",
+      headers: devToHeaders(),
+      body: JSON.stringify({
+        article: buildDevToArticle(post, { published: true }),
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`dev.to publish returned ${response.status}: ${errorText}`);
   }
 
   return (await response.json()) as DevToArticleResponse;

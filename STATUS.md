@@ -280,6 +280,10 @@ Admin currently:
 - Stores LinkedIn and Bluesky posting status, external ids/URLs, publish timestamps, and errors.
 - Can publish the canonical blog post from the post workspace.
 - Records canonical blog publishing as a `BLOG` platform publication.
+- Has top-row post workspace buttons for:
+  - `Publish blog`
+  - `Post to socials`
+- `Post to socials` publishes/skips idempotently across dev.to, LinkedIn, and Bluesky.
 - Uses a shared black/orange admin shell with persistent navigation.
 
 ### 5. Neon Auth
@@ -440,6 +444,11 @@ Implemented:
 - Morning Inngest summary reports selected topic/post readiness and platform outcomes.
 - Nightly Inngest summary reports available platform stats and next-day topic context.
 - Settings page has a test WhatsApp send action and notification delivery logging.
+- Inngest cron schedules now run on weekdays only in `America/New_York` time:
+  - topic planning: 8:00 AM
+  - draft buffer: 8:30 AM
+  - morning summary: 9:00 AM
+  - nightly stats/topic prep: 9:00 PM
 
 Current blocker:
 
@@ -459,11 +468,11 @@ Implemented:
 - dev.to article id/url stored in `PlatformPublication`.
 - dev.to status badge on the admin posts list.
 - dev.to draft can be recreated if the remote draft is manually deleted.
+- dev.to publishing is included in the one-click `Post to socials` action.
 
 Still needed:
 
 - Update existing dev.to drafts.
-- Publish live from admin after review.
 - Pull dev.to stats/status back into admin.
 
 ### Social Promotion Setup
@@ -485,7 +494,9 @@ Implemented:
 - LinkedIn post API call using saved LinkedIn copy.
 - LinkedIn image upload through Images API when `coverImageUrl` exists.
 - Bluesky post API call using the saved Bluesky copy.
+- Bluesky posts include rich-text facets so URLs and hashtags render as links/tags.
 - LinkedIn and Bluesky platform publication status/error tracking.
+- One-click `Post to socials` posts to LinkedIn and Bluesky while skipping already-published platforms.
 
 Needed:
 
@@ -651,15 +662,15 @@ Current operator flow:
 4. Edit the canonical Markdown if needed.
 5. Click `Publish blog canonical`.
 6. Open the blog URL and confirm the post is live.
-7. Open the dev.to draft, review it, and publish manually for now.
-8. Publish LinkedIn and Bluesky from the post workspace after the blog is live.
+7. Click `Post to socials` after reviewing the dev.to/social copy.
+8. Open dev.to, LinkedIn, and Bluesky links from the post workspace to confirm.
 
 Build next:
 
 - Add an Inngest-backed `Prepare selected queue` automation that prepares selected topics one at a time in the background.
 - Add visible job/run status in the admin so bulk preparation does not look stuck.
 - Add a stricter review state between `DRAFT_READY` and `PUBLISHED_BLOG`.
-- Add dev.to publish/update actions once the manual review loop feels solid.
+- Add richer visible success/failure feedback for multi-platform publishing.
 
 ### Later Improvements
 
@@ -735,9 +746,11 @@ Done:
 - Subscriber capture, email confirmation, and unsubscribe.
 - dev.to draft creation.
 - dev.to draft recreation.
+- dev.to publish through one-click social syndication.
 - AI cover image generation stored in Vercel Blob.
 - Promotion copy generation.
 - LinkedIn and Bluesky promotion posting.
+- One-click dev.to/LinkedIn/Bluesky posting from the post workspace.
 - Imported archive and future queue are separated.
 - Backlog topic suggestions can be generated from published titles and current queue state.
 - Selected topics can create linked draft posts in the post queue.
@@ -745,6 +758,7 @@ Done:
 - Canonical blog publishing is now an explicit post-workspace action.
 - Admin forms show loading states for long-running actions.
 - Inngest daily topic planning and draft-buffer functions are registered.
+- Inngest schedules are weekday-only in America/New_York time.
 - Twilio WhatsApp summaries are wired but waiting on production WhatsApp/template approval.
 
 Still to build:
@@ -752,7 +766,7 @@ Still to build:
 - Background bulk preparation for selected topics through Inngest.
 - Clear admin-visible job status/progress for bulk/background work.
 - Review/approval workflow before canonical publishing.
-- Update/publish existing dev.to drafts from admin.
+- Better multi-platform publish result UI.
 - LinkedIn impression analytics permissions/reporting.
 - WhatsApp delivery confirmation once Twilio approval is green.
 - Analytics.

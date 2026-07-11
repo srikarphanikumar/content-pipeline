@@ -11,8 +11,7 @@ import {
   generateCoverImageForPost,
   generatePromotionAssetsForPost,
   publishBlogCanonicalPost,
-  publishBlueskyPromotionForPost,
-  publishLinkedInPromotionForPost,
+  publishSyndicationAndSocialsForPost,
   recreateDevToDraftForPost,
   updatePost,
   updatePromotionAssetsForPost,
@@ -49,8 +48,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
   const publishBlogAction = publishBlogCanonicalPost.bind(null, post.id);
   const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
-  const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
-  const publishBlueskyAction = publishBlueskyPromotionForPost.bind(null, post.id);
+  const publishSocialsAction = publishSyndicationAndSocialsForPost.bind(null, post.id);
   const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
   const publicUrl = `https://blog.mspk.me/posts/${post.slug}`;
   const blogPublication = post.publications.find(
@@ -106,8 +104,13 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
     },
     {
       label: "dev.to",
-      detail: devToPublication?.externalId ? "Draft created" : "Create draft",
-      done: Boolean(devToPublication?.externalId),
+      detail:
+        devToPublication?.status === "PUBLISHED"
+          ? "Published"
+          : devToPublication?.externalId
+            ? "Draft created"
+            : "Create draft",
+      done: devToPublication?.status === "PUBLISHED" || Boolean(devToPublication?.externalId),
     },
     {
       label: "Promo copy",
@@ -131,8 +134,28 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       actions={
         <>
           <SecondaryLink href="/posts">All posts</SecondaryLink>
+          {!isProtectedImport ? (
+            <form action={publishBlogAction}>
+              <SubmitButton
+                className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+                pendingLabel={isBlogPublished ? "Refreshing..." : "Publishing..."}
+              >
+                {isBlogPublished ? "Refresh blog" : "Publish blog"}
+              </SubmitButton>
+            </form>
+          ) : null}
+          {hasPromotionAssets ? (
+            <form action={publishSocialsAction}>
+              <SubmitButton
+                className="inline-flex h-10 items-center rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Posting..."
+              >
+                Post to socials
+              </SubmitButton>
+            </form>
+          ) : null}
           <a
-            className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
+            className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white transition hover:border-orange-400 hover:text-orange-300"
             href={publicUrl}
             rel="noreferrer"
             target="_blank"
@@ -275,8 +298,8 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 <div>
                   <h3 className="font-semibold text-white">Canonical blog publish</h3>
                   <p className="mt-1 text-sm leading-6 text-zinc-400">
-                    Make this article visible on blog.mspk.me before syndicating
-                    or promoting it elsewhere.
+                    Use the top-row publish button after review. Social posting
+                    is intentionally gated on this step.
                   </p>
                 </div>
                 {isProtectedImport ? (
@@ -284,14 +307,9 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                     Imported archive
                   </span>
                 ) : (
-                  <form action={publishBlogAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                      pendingLabel={isBlogPublished ? "Refreshing..." : "Publishing..."}
-                    >
-                      {isBlogPublished ? "Refresh blog publish" : "Publish blog canonical"}
-                    </SubmitButton>
-                  </form>
+                  <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-300">
+                    {isBlogPublished ? "Blog live" : "Awaiting publish"}
+                  </span>
                 )}
               </div>
               {blogPublication?.errorMessage ? (
@@ -415,16 +433,6 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                   </p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  <form action={publishLinkedInAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                      pendingLabel="Posting..."
-                    >
-                      {linkedInPublication?.status === "PUBLISHED"
-                        ? "Post again to LinkedIn"
-                        : "Post to LinkedIn"}
-                    </SubmitButton>
-                  </form>
                   {linkedInPublication?.externalUrl ? (
                     <a
                       className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
@@ -458,16 +466,6 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                   </p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  <form action={publishBlueskyAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                      pendingLabel="Posting..."
-                    >
-                      {blueskyPublication?.status === "PUBLISHED"
-                        ? "Post again to Bluesky"
-                        : "Post to Bluesky"}
-                    </SubmitButton>
-                  </form>
                   {blueskyPublication?.externalUrl ? (
                     <a
                       className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"

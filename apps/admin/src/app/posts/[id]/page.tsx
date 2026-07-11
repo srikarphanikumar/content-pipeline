@@ -144,7 +144,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
               </SubmitButton>
             </form>
           ) : null}
-          {hasPromotionAssets ? (
+          {hasPromotionAssets && isBlogPublished ? (
             <form action={publishSocialsAction}>
               <SubmitButton
                 className="inline-flex h-10 items-center rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
@@ -153,6 +153,10 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 Post to socials
               </SubmitButton>
             </form>
+          ) : hasPromotionAssets ? (
+            <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-400">
+              Publish blog first
+            </span>
           ) : null}
           <a
             className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white transition hover:border-orange-400 hover:text-orange-300"

@@ -131,6 +131,27 @@ async function markPlatformPublicationFailed(publicationId: string, error: unkno
   });
 }
 
+async function recordPlatformFailure(postId: string, platform: Platform, error: unknown) {
+  await db.platformPublication.upsert({
+    where: {
+      postId_platform: {
+        postId,
+        platform,
+      },
+    },
+    create: {
+      postId,
+      platform,
+      status: "FAILED",
+      errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
+    },
+    update: {
+      status: "FAILED",
+      errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
+    },
+  });
+}
+
 async function isCanonicalBlogPublished(postId: string, status: PostStatus) {
   if (blogPublishedStatuses.includes(status)) {
     return true;
@@ -725,24 +746,53 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
   }
 
   if (!(await isCanonicalBlogPublished(postId, post.status))) {
-    throw new Error("Publish the canonical blog post before posting to socials.");
+    await db.platformPublication.upsert({
+      where: {
+        postId_platform: {
+          postId,
+          platform: "DEVTO",
+        },
+      },
+      create: {
+        postId,
+        platform: "DEVTO",
+        status: "FAILED",
+        errorMessage: "Publish the canonical blog post before posting to socials.",
+      },
+      update: {
+        status: "FAILED",
+        errorMessage: "Publish the canonical blog post before posting to socials.",
+      },
+    });
+    revalidatePath("/posts");
+    revalidatePath(`/posts/${postId}`);
+    return;
   }
 
   const publications = new Map(
     post.publications.map((publication) => [publication.platform, publication.status]),
   );
-  const tasks: Array<Promise<unknown>> = [];
+  const tasks: Array<{ platform: Platform; run: () => Promise<unknown> }> = [];
 
   if (publications.get("DEVTO") !== "PUBLISHED") {
-    tasks.push(publishDevToSyndicationForPost(postId));
+    tasks.push({
+      platform: "DEVTO",
+      run: () => publishDevToSyndicationForPost(postId),
+    });
   }
 
   if (publications.get("LINKEDIN") !== "PUBLISHED") {
-    tasks.push(publishLinkedInPromotionForPost(postId));
+    tasks.push({
+      platform: "LINKEDIN",
+      run: () => publishLinkedInPromotionForPost(postId),
+    });
   }
 
   if (publications.get("BLUESKY") !== "PUBLISHED") {
-    tasks.push(publishBlueskyPromotionForPost(postId));
+    tasks.push({
+      platform: "BLUESKY",
+      run: () => publishBlueskyPromotionForPost(postId),
+    });
   }
 
   if (tasks.length === 0) {
@@ -751,8 +801,15 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
     return;
   }
 
-  const results = await Promise.allSettled(tasks);
-  const failures = results.filter((result) => result.status === "rejected");
+  await Promise.all(
+    tasks.map(async (task) => {
+      try {
+        await task.run();
+      } catch (error) {
+        await recordPlatformFailure(postId, task.platform, error);
+      }
+    }),
+  );
 
   const publishedCount = await db.platformPublication.count({
     where: {
@@ -778,15 +835,6 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
 
-  if (failures.length > 0) {
-    throw new Error(
-      failures
-        .map((failure) =>
-          failure.status === "rejected" && failure.reason instanceof Error
-            ? failure.reason.message
-            : "Unknown publishing error",
-        )
-        .join("\n"),
-    );
-  }
+  // Do not throw from the aggregate action. Each platform action records its own
+  // FAILED status and error message, and throwing here crashes the production page.
 }

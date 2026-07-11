@@ -1,9 +1,21 @@
 import { NextResponse } from "next/server";
 import { generateBacklogTopics } from "@/app/topics/actions";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const result = await generateBacklogTopics();
+    let count = 100;
+
+    try {
+      const body = (await request.json()) as { count?: unknown };
+
+      if (typeof body.count === "number") {
+        count = body.count;
+      }
+    } catch {
+      // Empty request body is fine. The default batch size is used.
+    }
+
+    const result = await generateBacklogTopics(count);
 
     return NextResponse.json({
       ok: true,

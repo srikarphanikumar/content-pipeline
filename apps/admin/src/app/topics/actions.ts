@@ -24,7 +24,7 @@ type GeneratedDraft = {
 type TopicGenerationResult = {
   createdCount: number;
   requestedCount: number;
-  source: "openai" | "fallback";
+  source: "fallback" | "mixed" | "openai";
 };
 
 function stringValue(formData: FormData, key: string) {
@@ -48,7 +48,7 @@ function scoreValue(value: unknown) {
 }
 
 function fallbackTopics(publishedTitles: string[], existingTitles: string[]): GeneratedTopic[] {
-  const baseIdeas = [
+  const baseIdeas: GeneratedTopic[] = [
     {
       title: "What happens when AI-generated UI forgets accessibility",
       description:
@@ -170,9 +170,57 @@ function fallbackTopics(publishedTitles: string[], existingTitles: string[]): Ge
       difficulty: 8,
     },
   ];
+  const subjects = [
+    "AI-generated modals",
+    "AI-generated tables",
+    "AI-generated command palettes",
+    "AI-generated onboarding flows",
+    "AI-generated search experiences",
+    "AI-generated settings pages",
+    "AI-generated data visualizations",
+    "AI-generated checkout forms",
+    "AI-generated notification systems",
+    "AI-generated autocomplete widgets",
+    "AI-generated drag-and-drop interfaces",
+    "AI-generated virtualized lists",
+    "AI-generated toast messages",
+    "AI-generated file upload flows",
+    "AI-generated rich text editors",
+    "AI-generated navigation menus",
+    "AI-generated empty states",
+    "AI-generated loading states",
+    "AI-generated multi-step forms",
+    "AI-generated dashboards",
+  ];
+  const mechanisms = [
+    "focus management",
+    "screen reader announcements",
+    "keyboard navigation",
+    "ARIA naming",
+    "semantic HTML",
+    "reduced motion",
+    "live regions",
+    "error recovery",
+    "browser autofill",
+    "DOM order",
+    "portal behavior",
+    "shadow DOM boundaries",
+    "form validation timing",
+    "route transitions",
+    "loading state semantics",
+  ];
+  const generatedIdeas: GeneratedTopic[] = subjects.flatMap((subject, subjectIndex) =>
+    mechanisms.map((mechanism, mechanismIndex) => ({
+      title: `Why ${subject.toLowerCase()} often get ${mechanism} wrong`,
+      description: `A practical look at how ${subject.toLowerCase()} can fail around ${mechanism}, why the bug hides during visual review, and how frontend teams can catch it before shipping.`,
+      difficulty: Math.min(10, 5 + ((subjectIndex + mechanismIndex) % 5)),
+      audienceFit: 8 + ((subjectIndex + mechanismIndex) % 2),
+      noveltyScore: 7 + ((subjectIndex + mechanismIndex) % 3),
+    })),
+  );
   const seen = new Set([...publishedTitles, ...existingTitles].map((title) => title.toLowerCase()));
 
-  return baseIdeas.filter((idea) => !seen.has(idea.title.toLowerCase()));
+  return [...baseIdeas, ...generatedIdeas].filter((idea) => !seen.has(idea.title.toLowerCase()));
 }
 
 function parseGeneratedTopics(value: string) {
@@ -340,7 +388,8 @@ export async function generateNextBacklogTopicsFromForm() {
   redirect(`/topics?${params.toString()}`);
 }
 
-export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
+export async function generateBacklogTopics(requestedCount = 100): Promise<TopicGenerationResult> {
+  const normalizedRequestedCount = Math.min(Math.max(Math.round(requestedCount), 1), 100);
   const [publishedPosts, queuePosts, existingTopics] = await Promise.all([
     db.post.findMany({
       where: {
@@ -380,7 +429,7 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
     }),
     db.topic.findMany({
       orderBy: [{ updatedAt: "desc" }],
-      take: 80,
+      take: 220,
       select: {
         title: true,
         description: true,
@@ -394,17 +443,19 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
     ...existingTopics.map((topic) => topic.title),
   ];
   const apiKey = process.env.OPENAI_API_KEY;
-  let ideas: GeneratedTopic[] = fallbackTopics(publishedTitles, existingTitles);
+  const fallbackIdeas = fallbackTopics(publishedTitles, existingTitles);
+  let ideas: GeneratedTopic[] = fallbackIdeas;
   let source: TopicGenerationResult["source"] = "fallback";
 
   if (apiKey) {
     const openai = new OpenAI({ apiKey });
     try {
+      const openAiTargetCount = Math.min(40, normalizedRequestedCount);
       const response = await openai.chat.completions.create(
         {
           model: "gpt-4.1-mini",
           temperature: 0.65,
-          max_tokens: 2200,
+          max_tokens: 5200,
           response_format: { type: "json_object" },
           messages: [
             {
@@ -415,7 +466,7 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
             {
               role: "user",
               content: [
-                "Generate 12 new article backlog ideas.",
+                `Generate ${openAiTargetCount} new article backlog ideas.`,
                 "",
                 "Rules:",
                 "- Do not duplicate or lightly rename already published titles.",
@@ -424,6 +475,7 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
                 "- Avoid generic accessibility checklists and generic AI takes.",
                 "- Prefer concrete browser, React, DOM, ARIA, focus, keyboard, screen reader, design system, AI-generated UI, or frontend architecture mechanisms.",
                 "- Each idea should fit the Under The Hood style: explain mechanisms, tradeoffs, debugging, review models, and production implications.",
+                `- Return exactly ${openAiTargetCount} ideas if possible.`,
                 "- Return JSON with key topics, an array of objects: title, description, noveltyScore, audienceFit, difficulty.",
                 "- Scores are integers from 1 to 10.",
                 "",
@@ -450,8 +502,8 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
           const parsedIdeas = parseGeneratedTopics(content);
 
           if (parsedIdeas.length > 0) {
-            ideas = parsedIdeas;
-            source = "openai";
+            ideas = [...parsedIdeas, ...fallbackIdeas];
+            source = parsedIdeas.length >= normalizedRequestedCount ? "openai" : "mixed";
           }
         } catch (error) {
           console.error("Could not parse generated topic ideas.", error);
@@ -467,12 +519,16 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
   );
   const uniqueIdeas = ideas
     .filter((idea) => !seen.has(idea.title.toLowerCase()))
-    .slice(0, 10);
+    .filter((idea, index, allIdeas) => {
+      const normalizedTitle = idea.title.toLowerCase();
+      return allIdeas.findIndex((candidate) => candidate.title.toLowerCase() === normalizedTitle) === index;
+    })
+    .slice(0, normalizedRequestedCount);
 
   if (uniqueIdeas.length === 0) {
     return {
       createdCount: 0,
-      requestedCount: 10,
+      requestedCount: normalizedRequestedCount,
       source,
     };
   }
@@ -491,7 +547,7 @@ export async function generateBacklogTopics(): Promise<TopicGenerationResult> {
 
   return {
     createdCount: uniqueIdeas.length,
-    requestedCount: 10,
+    requestedCount: normalizedRequestedCount,
     source,
   };
 }

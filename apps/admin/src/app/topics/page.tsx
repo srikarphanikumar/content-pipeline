@@ -5,11 +5,13 @@ import { SubmitButton } from "../components/SubmitButton";
 import { CaptureTopicModal } from "./CaptureTopicModal";
 import {
   createDraftPostFromTopic,
+  createDraftsForAllSelectedTopics,
   createTopic,
-  clearAllTopics,
+  clearAllTopicsFromForm,
   deleteTopic,
   generateNextBacklogTopicsFromForm,
-  selectAllBacklogTopics,
+  prepareNextSelectedTopicDraft,
+  selectAllBacklogTopicsFromForm,
   updateTopic,
   updateTopicStatus,
 } from "./actions";
@@ -28,13 +30,17 @@ const statusStyles: Record<string, string> = {
 
 type TopicsPageProps = {
   searchParams: Promise<{
+    cleared?: string;
+    drafted?: string;
     generated?: string;
+    moved?: string;
+    prepared?: string;
     source?: string;
   }>;
 };
 
 export default async function TopicsPage({ searchParams }: TopicsPageProps) {
-  const { generated, source } = await searchParams;
+  const { cleared, drafted, generated, moved, prepared, source } = await searchParams;
   const [topics, publishedPostCount, queuePostCount] = await Promise.all([
     db.topic.findMany({
       orderBy: [{ updatedAt: "desc" }],
@@ -93,6 +99,28 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             : `Created ${generated} new topic${generated === "1" ? "" : "s"}${source ? ` via ${source}` : ""}.`}
         </div>
       ) : null}
+      {moved ? (
+        <div className="mb-4 rounded-md border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+          Moved {moved} backlog topic{moved === "1" ? "" : "s"} to selected.
+        </div>
+      ) : null}
+      {drafted ? (
+        <div className="mb-4 rounded-md border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+          Created {drafted} draft post{drafted === "1" ? "" : "s"} from selected topics.
+        </div>
+      ) : null}
+      {cleared ? (
+        <div className="mb-4 rounded-md border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">
+          Cleared {cleared} topic{cleared === "1" ? "" : "s"}.
+        </div>
+      ) : null}
+      {prepared ? (
+        <div className="mb-4 rounded-md border border-orange-400/30 bg-orange-500/10 p-3 text-sm text-orange-100">
+          {prepared === "0"
+            ? "No selected topics without drafts are available."
+            : "Could not prepare the selected topic. Check logs and provider credentials."}
+        </div>
+      ) : null}
 
       <section className="mb-4 rounded-lg border border-orange-400/30 bg-orange-500/10 p-4">
         <div>
@@ -129,12 +157,28 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             Add topic batch
           </SubmitButton>
         </form>
-        <form action={selectAllBacklogTopics}>
+        <form action={selectAllBacklogTopicsFromForm}>
           <SubmitButton
             className="h-9 rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
             pendingLabel="Selecting..."
           >
             Move all to selected ({backlogCount})
+          </SubmitButton>
+        </form>
+        <form action={prepareNextSelectedTopicDraft}>
+          <SubmitButton
+            className="h-9 rounded-md border border-emerald-400 px-3 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Preparing..."
+          >
+            Prepare next selected
+          </SubmitButton>
+        </form>
+        <form action={createDraftsForAllSelectedTopics}>
+          <SubmitButton
+            className="h-9 rounded-md border border-sky-400 px-3 text-xs font-semibold text-sky-300 transition hover:bg-sky-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Drafting..."
+          >
+            Draft all selected
           </SubmitButton>
         </form>
         <CaptureTopicModal action={createTopic} statuses={statuses} />
@@ -144,7 +188,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         >
           Copy all topic titles
         </CopyButton>
-        <form action={clearAllTopics} className="ml-auto">
+        <form action={clearAllTopicsFromForm} className="ml-auto">
           <SubmitButton
             className="h-9 rounded-md border border-red-400 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
             pendingLabel="Clearing..."

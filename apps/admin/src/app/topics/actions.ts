@@ -4,6 +4,9 @@ import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, slugify } from "@content-pipeline/db";
+import { generateAndStoreCoverImage } from "@/lib/cover-image";
+import { createDevToDraft } from "@/lib/devto";
+import { generatePromotionCopy } from "@/lib/promotion";
 
 type GeneratedTopic = {
   title: string;
@@ -604,7 +607,7 @@ export async function deleteTopic(topicId: string) {
 }
 
 export async function selectAllBacklogTopics() {
-  await db.topic.updateMany({
+  const result = await db.topic.updateMany({
     where: {
       status: "backlog",
     },
@@ -615,14 +618,28 @@ export async function selectAllBacklogTopics() {
 
   revalidatePath("/");
   revalidatePath("/topics");
+
+  return result.count;
+}
+
+export async function selectAllBacklogTopicsFromForm() {
+  const count = await selectAllBacklogTopics();
+  redirect(`/topics?moved=${count}`);
 }
 
 export async function clearAllTopics() {
-  await db.topic.deleteMany();
+  const result = await db.topic.deleteMany();
 
   revalidatePath("/");
   revalidatePath("/topics");
   revalidatePath("/posts");
+
+  return result.count;
+}
+
+export async function clearAllTopicsFromForm() {
+  const count = await clearAllTopics();
+  redirect(`/topics?cleared=${count}`);
 }
 
 export async function createDraftPostRecordFromTopic(topicId: string) {
@@ -782,4 +799,266 @@ export async function createDraftPostRecordFromTopic(topicId: string) {
 export async function createDraftPostFromTopic(topicId: string) {
   const postId = await createDraftPostRecordFromTopic(topicId);
   redirect(`/posts/${postId}`);
+}
+
+async function ensureCoverImage(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found after draft creation.");
+  }
+
+  if (post.coverImageUrl) {
+    return post.coverImageUrl;
+  }
+
+  const coverImageUrl = await generateAndStoreCoverImage(post);
+
+  await db.post.update({
+    where: {
+      id: postId,
+    },
+    data: {
+      coverImageUrl,
+    },
+  });
+
+  return coverImageUrl;
+}
+
+async function ensureDevToDraft(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found for dev.to draft.");
+  }
+
+  const existingPublication = await db.platformPublication.findUnique({
+    where: {
+      postId_platform: {
+        platform: "DEVTO",
+        postId,
+      },
+    },
+  });
+
+  if (existingPublication?.externalId) {
+    return existingPublication.externalId;
+  }
+
+  const publication = await db.platformPublication.upsert({
+    where: {
+      postId_platform: {
+        platform: "DEVTO",
+        postId,
+      },
+    },
+    create: {
+      platform: "DEVTO",
+      postId,
+      status: "GENERATED",
+    },
+    update: {
+      errorMessage: null,
+      status: "GENERATED",
+    },
+  });
+
+  try {
+    const devToArticle = await createDevToDraft(post);
+
+    await db.platformPublication.update({
+      where: {
+        id: publication.id,
+      },
+      data: {
+        errorMessage: null,
+        externalId: String(devToArticle.id),
+        externalUrl: devToArticle.url || null,
+        status: "GENERATED",
+      },
+    });
+
+    return String(devToArticle.id);
+  } catch (error) {
+    await db.platformPublication.update({
+      where: {
+        id: publication.id,
+      },
+      data: {
+        errorMessage: error instanceof Error ? error.message : "Unknown dev.to error.",
+        status: "FAILED",
+      },
+    });
+
+    throw error;
+  }
+}
+
+async function ensurePromotionAssets(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found for promotion copy.");
+  }
+
+  const promotionCopy = await generatePromotionCopy(post);
+
+  await Promise.all([
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "LINKEDIN_POST",
+        },
+      },
+      create: {
+        content: promotionCopy.linkedInPost,
+        postId,
+        type: "LINKEDIN_POST",
+      },
+      update: {
+        content: promotionCopy.linkedInPost,
+      },
+    }),
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "LINKEDIN_FIRST_COMMENT",
+        },
+      },
+      create: {
+        content: promotionCopy.linkedInFirstComment,
+        postId,
+        type: "LINKEDIN_FIRST_COMMENT",
+      },
+      update: {
+        content: promotionCopy.linkedInFirstComment,
+      },
+    }),
+    db.promotionAsset.upsert({
+      where: {
+        postId_type: {
+          postId,
+          type: "BLUESKY_POST",
+        },
+      },
+      create: {
+        content: promotionCopy.blueskyPost.slice(0, 300),
+        postId,
+        type: "BLUESKY_POST",
+      },
+      update: {
+        content: promotionCopy.blueskyPost.slice(0, 300),
+      },
+    }),
+  ]);
+}
+
+async function firstSelectedTopicWithoutPost() {
+  return db.topic.findFirst({
+    where: {
+      posts: {
+        none: {},
+      },
+      status: "selected",
+    },
+    orderBy: [
+      {
+        audienceFit: "desc",
+      },
+      {
+        noveltyScore: "desc",
+      },
+      {
+        updatedAt: "asc",
+      },
+    ],
+    select: {
+      id: true,
+    },
+  });
+}
+
+export async function prepareNextSelectedTopicDraft() {
+  const topic = await firstSelectedTopicWithoutPost();
+
+  if (!topic) {
+    redirect("/topics?prepared=0");
+  }
+
+  try {
+    const postId = await createDraftPostRecordFromTopic(topic.id);
+
+    await ensureCoverImage(postId);
+    await ensureDevToDraft(postId);
+    await ensurePromotionAssets(postId);
+
+    await db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "DRAFT_READY",
+      },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/posts");
+    revalidatePath(`/posts/${postId}`);
+    revalidatePath("/topics");
+    redirect(`/posts/${postId}?prepared=1`);
+  } catch (error) {
+    console.error("Could not prepare next selected topic.", error);
+    redirect("/topics?prepared=error");
+  }
+}
+
+export async function createDraftsForAllSelectedTopics() {
+  const selectedTopics = await db.topic.findMany({
+    where: {
+      posts: {
+        none: {},
+      },
+      status: "selected",
+    },
+    orderBy: [
+      {
+        audienceFit: "desc",
+      },
+      {
+        noveltyScore: "desc",
+      },
+      {
+        updatedAt: "asc",
+      },
+    ],
+    select: {
+      id: true,
+    },
+  });
+  let createdCount = 0;
+
+  for (const topic of selectedTopics) {
+    await createDraftPostRecordFromTopic(topic.id);
+    createdCount += 1;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath("/topics");
+  redirect(`/topics?drafted=${createdCount}`);
 }

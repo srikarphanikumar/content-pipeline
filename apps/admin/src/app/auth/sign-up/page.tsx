@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "../../components/SubmitButton";
 import { signUpWithEmail } from "./actions";
 
 type SignUpPageProps = {
@@ -66,13 +67,22 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
               type="password"
             />
           </label>
-          <button
-            className="h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-            disabled={!signupEnabled}
-            type="submit"
-          >
-            Create account
-          </button>
+          {signupEnabled ? (
+            <SubmitButton
+              className="h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+              pendingLabel="Creating..."
+            >
+              Create account
+            </SubmitButton>
+          ) : (
+            <button
+              className="h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white opacity-60"
+              disabled
+              type="submit"
+            >
+              Create account
+            </button>
+          )}
         </form>
 
         <p className="mt-5 text-sm text-slate-600">

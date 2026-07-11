@@ -69,7 +69,12 @@ export function ImportSubstackForm() {
           disabled={isPending}
           type="submit"
         >
-          {isPending ? "Working..." : "Preview feed"}
+          <span className="inline-flex items-center gap-2">
+            {isPending ? (
+              <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : null}
+            {isPending ? "Working..." : "Preview feed"}
+          </span>
         </button>
       </form>
 
@@ -104,7 +109,12 @@ export function ImportSubstackForm() {
                 disabled={isPending}
                 type="submit"
               >
-                Import new posts
+                <span className="inline-flex items-center gap-2">
+                  {isPending ? (
+                    <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : null}
+                  {isPending ? "Importing..." : "Import new posts"}
+                </span>
               </button>
             </form>
           </div>

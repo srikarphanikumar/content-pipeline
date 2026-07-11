@@ -472,10 +472,13 @@ Implemented:
   - existing topic backlog
 - Suggested ideas are created as `Topic` rows with `backlog` status.
 - OpenAI is used when `OPENAI_API_KEY` exists; deterministic fallback ideas are available otherwise.
+- Backlog topics can be bulk-moved to `selected`.
+- A topic can now create a linked draft post and redirect into the post workspace.
+- Draft generation uses OpenAI when available and a structured fallback draft otherwise.
 
 Needed:
 
-- Draft generation flow.
+- Draft quality/review improvements.
 - 20-post buffer automation.
 
 ### Image Generation
@@ -559,12 +562,14 @@ Implemented in this pass:
 - Dashboard replaced stale BRD/dummy queue with live workflow cards.
 - Posts list now has status filters, clearer status badges, and row-level navigation.
 - Posts list now separates Queue, Imported archive, and All posts.
+- Long-running form actions now show loading states/spinners.
 - Post workspace now groups Blog, dev.to, Promotion, and Edit sections.
 - Copy-to-clipboard controls for generated promotion assets.
 - LinkedIn and Bluesky publish controls with status, links, and errors.
 - Settings page redesigned as provider status cards.
 - Topic backlog page added with topic creation and status updates.
 - Topic backlog page added next-topic generation from published titles and queue state.
+- Topic backlog page added bulk selection and explicit draft-post creation.
 
 Still useful to improve:
 
@@ -578,7 +583,7 @@ Still useful to improve:
 Build:
 
 - Convert selected backlog topics into draft posts.
-- Add draft generation flow from a topic.
+- Improve generated draft quality and post-review workflow.
 - Add ready-buffer workflow for maintaining 20 draft-ready posts.
 
 ### Later Improvements
@@ -660,11 +665,13 @@ Done:
 - LinkedIn and Bluesky promotion posting.
 - Imported archive and future queue are separated.
 - Backlog topic suggestions can be generated from published titles and current queue state.
+- Selected topics can create linked draft posts in the post queue.
+- Admin forms show loading states for long-running actions.
 
 Still to build:
 
 - Update/publish existing dev.to drafts.
-- Topic-to-draft generation.
+- Topic-to-draft review workflow.
 - 20-post buffer workflows.
 - Analytics.
 - New post generation and syndication pipeline.

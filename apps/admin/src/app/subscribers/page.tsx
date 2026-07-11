@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db, formatDate } from "@content-pipeline/db";
 import type { SubscriberStatus } from "@content-pipeline/db";
 import { AdminShell } from "../components/AdminShell";
+import { SubmitButton } from "../components/SubmitButton";
 import { updateSubscriberStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -141,23 +142,23 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
                         {subscriber.status !== "ACTIVE" ? (
                           <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
                             <input name="status" type="hidden" value="ACTIVE" />
-                            <button
+                            <SubmitButton
                               className="inline-flex h-9 items-center rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300"
-                              type="submit"
+                              pendingLabel="Activating..."
                             >
                               Activate
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null}
                         {subscriber.status !== "UNSUBSCRIBED" ? (
                           <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
                             <input name="status" type="hidden" value="UNSUBSCRIBED" />
-                            <button
+                            <SubmitButton
                               className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-semibold text-black"
-                              type="submit"
+                              pendingLabel="Updating..."
                             >
                               Unsubscribe
-                            </button>
+                            </SubmitButton>
                           </form>
                         ) : null}
                       </div>

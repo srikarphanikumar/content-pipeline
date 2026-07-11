@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type React from "react";
 import { signOut } from "../auth/sign-out/actions";
+import { SubmitButton } from "./SubmitButton";
 
 const navItems = [
   { href: "/", label: "Pipeline" },
@@ -66,12 +67,12 @@ export function AdminShell({
               Blog
             </a>
             <form action={signOut}>
-              <button
+              <SubmitButton
                 className="rounded-md bg-orange-500 px-3 py-2 font-semibold text-black transition hover:bg-orange-400"
-                type="submit"
+                pendingLabel="Signing out..."
               >
                 Sign out
-              </button>
+              </SubmitButton>
             </form>
           </nav>
         </div>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@content-pipeline/db";
 import { AdminShell, SecondaryLink } from "../../components/AdminShell";
 import { CopyButton } from "../../components/CopyButton";
+import { SubmitButton } from "../../components/SubmitButton";
 import { PostForm } from "../PostForm";
 import {
   createDevToDraftForPost,
@@ -183,12 +184,12 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 </div>
               )}
               <form action={generateCoverImageAction}>
-                <button
+                <SubmitButton
                   className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black"
-                  type="submit"
+                  pendingLabel={post.coverImageUrl ? "Regenerating..." : "Generating..."}
                 >
                   {post.coverImageUrl ? "Regenerate cover image" : "Generate cover image"}
-                </button>
+                </SubmitButton>
               </form>
               <p className="text-xs leading-5 text-zinc-500">
                 Used by the blog, dev.to, and LinkedIn image posts.
@@ -241,12 +242,12 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 </>
               ) : (
                 <form action={createDevToDraftAction}>
-                  <button
+                  <SubmitButton
                     className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                    type="submit"
+                    pendingLabel="Creating draft..."
                   >
                     Create dev.to draft
-                  </button>
+                  </SubmitButton>
                 </form>
               )}
             </div>
@@ -268,12 +269,12 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
               </p>
             </div>
             <form action={generatePromotionAction}>
-              <button
+              <SubmitButton
                 className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                type="submit"
+                pendingLabel={hasPromotionAssets ? "Regenerating..." : "Generating..."}
               >
                 {hasPromotionAssets ? "Regenerate copy" : "Generate copy"}
-              </button>
+              </SubmitButton>
             </form>
           </div>
 
@@ -300,14 +301,14 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <form action={publishLinkedInAction}>
-                    <button
+                    <SubmitButton
                       className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                      type="submit"
+                      pendingLabel="Posting..."
                     >
                       {linkedInPublication?.status === "PUBLISHED"
                         ? "Post again to LinkedIn"
                         : "Post to LinkedIn"}
-                    </button>
+                    </SubmitButton>
                   </form>
                   {linkedInPublication?.externalUrl ? (
                     <a
@@ -343,14 +344,14 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <form action={publishBlueskyAction}>
-                    <button
+                    <SubmitButton
                       className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                      type="submit"
+                      pendingLabel="Posting..."
                     >
                       {blueskyPublication?.status === "PUBLISHED"
                         ? "Post again to Bluesky"
                         : "Post to Bluesky"}
-                    </button>
+                    </SubmitButton>
                   </form>
                   {blueskyPublication?.externalUrl ? (
                     <a
@@ -392,12 +393,12 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                     />
                   </label>
                 ))}
-                <button
+                <SubmitButton
                   className="h-10 w-fit rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black"
-                  type="submit"
+                  pendingLabel="Saving..."
                 >
                   Save copy edits
-                </button>
+                </SubmitButton>
               </form>
             </div>
           ) : null}

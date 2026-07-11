@@ -1,6 +1,13 @@
 import { db } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink } from "../components/AdminShell";
-import { createTopic, generateNextBacklogTopics, updateTopicStatus } from "./actions";
+import { SubmitButton } from "../components/SubmitButton";
+import {
+  createDraftPostFromTopic,
+  createTopic,
+  generateNextBacklogTopics,
+  selectAllBacklogTopics,
+  updateTopicStatus,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +58,7 @@ export default async function TopicsPage() {
   ]);
   const activeTopics = topics.filter((topic) => topic.status !== "done");
   const doneTopics = topics.filter((topic) => topic.status === "done");
+  const backlogCount = topics.filter((topic) => topic.status === "backlog").length;
 
   const counts = statuses.map((status) => ({
     status,
@@ -89,12 +97,12 @@ export default async function TopicsPage() {
           </div>
         </div>
         <form action={generateNextBacklogTopics}>
-          <button
-            className="h-11 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-            type="submit"
+          <SubmitButton
+            className="h-11 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Suggesting..."
           >
             Suggest next topics
-          </button>
+          </SubmitButton>
         </form>
       </section>
 
@@ -109,6 +117,28 @@ export default async function TopicsPage() {
           </section>
         ))}
       </div>
+
+      <section className="mt-6 flex flex-col justify-between gap-3 rounded-lg border border-white/10 bg-[#141414] p-5 md:flex-row md:items-center">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+            Bulk planning
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">
+            Move generated backlog into selection
+          </h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Selection means these ideas are candidates for draft generation.
+          </p>
+        </div>
+        <form action={selectAllBacklogTopics}>
+          <SubmitButton
+            className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Selecting..."
+          >
+            Move all backlog to selected ({backlogCount})
+          </SubmitButton>
+        </form>
+      </section>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[0.42fr_0.58fr]">
         <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
@@ -166,12 +196,9 @@ export default async function TopicsPage() {
                 ))}
               </select>
             </label>
-            <button
-              className="h-10 w-fit rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-              type="submit"
-            >
+            <SubmitButton pendingLabel="Adding...">
               Add topic
-            </button>
+            </SubmitButton>
           </form>
         </section>
 
@@ -211,27 +238,44 @@ export default async function TopicsPage() {
                       <span className="rounded-md bg-white/10 px-2 py-1">
                         Posts {topic.posts.length}
                       </span>
+                      {topic.posts[0] ? (
+                        <a
+                          className="rounded-md bg-orange-500 px-2 py-1 text-black"
+                          href={`/posts/${topic.posts[0].id}`}
+                        >
+                          Open draft
+                        </a>
+                      ) : null}
                     </div>
                   </div>
-                  <form action={updateTopicStatus.bind(null, topic.id)} className="flex gap-2">
-                    <select
-                      className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
-                      name="status"
-                      defaultValue={topic.status}
-                    >
-                      {statuses.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="h-10 rounded-md border border-orange-400 px-3 text-sm font-semibold text-orange-300"
-                      type="submit"
-                    >
-                      Save
-                    </button>
-                  </form>
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <form action={updateTopicStatus.bind(null, topic.id)} className="flex gap-2">
+                      <select
+                        className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
+                        name="status"
+                        defaultValue={topic.status}
+                      >
+                        {statuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                      <SubmitButton
+                        className="h-10 rounded-md border border-orange-400 px-3 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                        pendingLabel="Saving..."
+                      >
+                        Save
+                      </SubmitButton>
+                    </form>
+                    {topic.posts.length === 0 ? (
+                      <form action={createDraftPostFromTopic.bind(null, topic.id)}>
+                        <SubmitButton pendingLabel="Generating draft...">
+                          Create draft post
+                        </SubmitButton>
+                      </form>
+                    ) : null}
+                  </div>
                 </article>
               ))}
             </div>

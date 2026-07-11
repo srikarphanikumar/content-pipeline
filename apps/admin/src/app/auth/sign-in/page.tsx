@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "../../components/SubmitButton";
 import { signInWithEmail } from "./actions";
 
 type SignInPageProps = {
@@ -47,12 +48,12 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
               type="password"
             />
           </label>
-          <button
+          <SubmitButton
             className="h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-            type="submit"
+            pendingLabel="Signing in..."
           >
             Sign in
-          </button>
+          </SubmitButton>
         </form>
 
         <p className="mt-5 text-sm text-slate-600">

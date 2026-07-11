@@ -2,7 +2,8 @@
 
 import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
-import { db } from "@content-pipeline/db";
+import { redirect } from "next/navigation";
+import { db, slugify } from "@content-pipeline/db";
 
 type GeneratedTopic = {
   title: string;
@@ -10,6 +11,14 @@ type GeneratedTopic = {
   noveltyScore: number | null;
   audienceFit: number | null;
   difficulty: number | null;
+};
+
+type GeneratedDraft = {
+  title: string;
+  subtitle: string;
+  description: string;
+  tags: string[];
+  bodyMarkdown: string;
 };
 
 function stringValue(formData: FormData, key: string) {
@@ -100,6 +109,86 @@ function parseGeneratedTopics(value: string) {
       difficulty: scoreValue(topic.difficulty),
     }))
     .filter((topic) => topic.title);
+}
+
+function draftFallback(topic: {
+  title: string;
+  description: string | null;
+}): GeneratedDraft {
+  const description =
+    topic.description ||
+    "A practical Under The Hood draft exploring the mechanism, tradeoffs, and production debugging implications.";
+
+  return {
+    title: topic.title,
+    subtitle: description,
+    description,
+    tags: ["Frontend", "JavaScript", "Software Engineering"],
+    bodyMarkdown: [
+      `# ${topic.title}`,
+      "",
+      "## Hook",
+      "",
+      description,
+      "",
+      "## Why this matters",
+      "",
+      "Explain the production problem this creates and why surface-level abstractions hide the underlying mechanism.",
+      "",
+      "## Under the hood",
+      "",
+      "Break down the runtime, browser, framework, or system behavior step by step.",
+      "",
+      "## Debugging model",
+      "",
+      "Show how an engineer should reason about symptoms, traces, logs, and edge cases.",
+      "",
+      "## Practical takeaways",
+      "",
+      "- Identify the core mechanism.",
+      "- Name the tradeoff.",
+      "- Apply the debugging model.",
+      "- Decide what to optimize and what to leave alone.",
+    ].join("\n"),
+  };
+}
+
+function parseGeneratedDraft(value: string, topic: { title: string; description: string | null }) {
+  const parsed = JSON.parse(value) as Partial<GeneratedDraft>;
+  const fallback = draftFallback(topic);
+  const tags = Array.isArray(parsed.tags)
+    ? parsed.tags.filter((tag): tag is string => typeof tag === "string" && Boolean(tag.trim()))
+    : fallback.tags;
+
+  return {
+    title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : fallback.title,
+    subtitle:
+      typeof parsed.subtitle === "string" && parsed.subtitle.trim()
+        ? parsed.subtitle.trim()
+        : fallback.subtitle,
+    description:
+      typeof parsed.description === "string" && parsed.description.trim()
+        ? parsed.description.trim()
+        : fallback.description,
+    tags: tags.slice(0, 8),
+    bodyMarkdown:
+      typeof parsed.bodyMarkdown === "string" && parsed.bodyMarkdown.trim()
+        ? parsed.bodyMarkdown.trim()
+        : fallback.bodyMarkdown,
+  };
+}
+
+async function uniquePostSlug(title: string) {
+  const baseSlug = slugify(title);
+  let candidate = baseSlug;
+  let suffix = 2;
+
+  while (await db.post.findUnique({ where: { slug: candidate } })) {
+    candidate = `${baseSlug}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
 }
 
 export async function createTopic(formData: FormData) {
@@ -271,4 +360,141 @@ export async function updateTopicStatus(topicId: string, formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/topics");
+}
+
+export async function selectAllBacklogTopics() {
+  await db.topic.updateMany({
+    where: {
+      status: "backlog",
+    },
+    data: {
+      status: "selected",
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/topics");
+}
+
+export async function createDraftPostFromTopic(topicId: string) {
+  const topic = await db.topic.findUnique({
+    where: {
+      id: topicId,
+    },
+    include: {
+      posts: {
+        select: {
+          id: true,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!topic) {
+    throw new Error("Topic not found.");
+  }
+
+  if (topic.posts[0]) {
+    redirect(`/posts/${topic.posts[0].id}`);
+  }
+
+  let draft = draftFallback(topic);
+
+  if (process.env.OPENAI_API_KEY) {
+    const publishedPosts = await db.post.findMany({
+      where: {
+        OR: [
+          {
+            sourcePlatform: "SUBSTACK",
+          },
+          {
+            publishedAt: {
+              not: null,
+            },
+          },
+        ],
+      },
+      orderBy: [{ publishedAt: "desc" }],
+      take: 40,
+      select: {
+        title: true,
+        description: true,
+        tags: true,
+      },
+    });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You write first drafts for Under The Hood, a technical publication for frontend, JavaScript, full-stack, browser internals, performance, and AI engineers. Return only valid JSON.",
+        },
+        {
+          role: "user",
+          content: [
+            "Create a strong first-draft article from this topic.",
+            "",
+            "Return JSON with exactly these keys: title, subtitle, description, tags, bodyMarkdown.",
+            "The bodyMarkdown should be a complete technical draft of 1200-1800 words with headings, concrete mechanisms, debugging models, and practical takeaways.",
+            "Do not duplicate the titles or angles in the already-published posts.",
+            "",
+            "Topic:",
+            JSON.stringify({
+              title: topic.title,
+              description: topic.description,
+              noveltyScore: topic.noveltyScore,
+              audienceFit: topic.audienceFit,
+              difficulty: topic.difficulty,
+            }),
+            "",
+            "Already published posts:",
+            JSON.stringify(publishedPosts),
+          ].join("\n"),
+        },
+      ],
+    });
+    const content = response.choices[0]?.message.content;
+
+    if (content) {
+      try {
+        draft = parseGeneratedDraft(content, topic);
+      } catch (error) {
+        console.error("Could not parse generated draft.", error);
+      }
+    }
+  }
+
+  const slug = await uniquePostSlug(draft.title);
+  const post = await db.post.create({
+    data: {
+      title: draft.title,
+      slug,
+      subtitle: draft.subtitle,
+      description: draft.description,
+      bodyMarkdown: draft.bodyMarkdown,
+      tags: draft.tags,
+      status: "DRAFTING",
+      canonicalUrl: `${(process.env.BLOG_BASE_URL || "https://blog.mspk.me").replace(/\/$/, "")}/posts/${slug}`,
+      topicId,
+    },
+  });
+
+  await db.topic.update({
+    where: {
+      id: topicId,
+    },
+    data: {
+      status: "drafting",
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/topics");
+  revalidatePath("/posts");
+  redirect(`/posts/${post.id}`);
 }

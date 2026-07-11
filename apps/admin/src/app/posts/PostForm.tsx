@@ -1,4 +1,5 @@
 import type { Post, PostStatus } from "@content-pipeline/db";
+import { SubmitButton } from "../components/SubmitButton";
 
 const statuses: PostStatus[] = [
   "IDEA",
@@ -122,12 +123,12 @@ export function PostForm({ action, post }: PostFormProps) {
         />
       </label>
 
-      <button
+      <SubmitButton
         className="h-11 w-fit rounded-md bg-orange-500 px-5 text-sm font-semibold text-black transition hover:bg-orange-400"
-        type="submit"
+        pendingLabel="Saving..."
       >
         Save post
-      </button>
+      </SubmitButton>
     </form>
   );
 }

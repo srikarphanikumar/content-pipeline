@@ -475,6 +475,7 @@ Implemented:
 - Backlog topics can be bulk-moved to `selected`.
 - A topic can now create a linked draft post and redirect into the post workspace.
 - Draft generation uses OpenAI when available and a structured fallback draft otherwise.
+- Daily Vercel cron route tops up active backlog topics when the count drops below 20.
 
 Needed:
 
@@ -585,6 +586,7 @@ Build:
 - Convert selected backlog topics into draft posts.
 - Improve generated draft quality and post-review workflow.
 - Add ready-buffer workflow for maintaining 20 draft-ready posts.
+- Expand cron automation from topic top-up to draft-buffer health checks.
 
 ### Later Improvements
 

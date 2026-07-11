@@ -5,7 +5,7 @@ import {
 } from "@/app/topics/actions";
 import { generateAndStoreCoverImage } from "@/lib/cover-image";
 import { fetchBlueskyStats, fetchDevToStats } from "@/lib/platform-stats";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { inngest } from "./client";
 
 const activeTopicTarget = 20;
@@ -21,6 +21,13 @@ function formatPostLine(post: {
   title: string;
 }) {
   return `- ${post.title}\n  ${adminPostUrl(post.id)}`;
+}
+
+function notificationDate() {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "long",
+    timeZone: "America/New_York",
+  }).format(new Date());
 }
 
 export const dailyPlanning = inngest.createFunction(
@@ -317,7 +324,7 @@ export const morningPublishingSummary = inngest.createFunction(
             )
             .join("\n")
         : "- No failed platform actions.";
-    const body = [
+    const detail = [
       "Morning pipeline update",
       "",
       "Ready to publish:",
@@ -332,8 +339,18 @@ export const morningPublishingSummary = inngest.createFunction(
       "Failures:",
       failuresText,
     ].join("\n");
+    const body = `Under The Hood morning summary for ${notificationDate()}:\n\n${detail}\n\nReply STOP to opt out.`;
 
-    return step.run("Send WhatsApp morning summary", async () => sendWhatsAppMessage(body));
+    return step.run("Send WhatsApp morning summary", async () =>
+      sendWhatsAppTemplate(
+        process.env.TWILIO_MORNING_TEMPLATE_SID,
+        {
+          "1": notificationDate(),
+          "2": detail,
+        },
+        body,
+      ),
+    );
   },
 );
 
@@ -436,7 +453,7 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       topicState.selectedTopics.length > 0
         ? topicState.selectedTopics.map((topic) => `- ${topic.title}`).join("\n")
         : "- No selected topics ready for drafting.";
-    const body = [
+    const detail = [
       "Nightly platform stats",
       "",
       statsLines.join("\n"),
@@ -446,8 +463,18 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       "",
       `Active topic backlog: ${topicState.activeTopicCount}/${activeTopicTarget}`,
     ].join("\n");
+    const body = `Under The Hood nightly stats for ${notificationDate()}:\n\n${detail}\n\nReply STOP to opt out.`;
 
-    return step.run("Send WhatsApp nightly stats", async () => sendWhatsAppMessage(body));
+    return step.run("Send WhatsApp nightly stats", async () =>
+      sendWhatsAppTemplate(
+        process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
+        {
+          "1": notificationDate(),
+          "2": detail,
+        },
+        body,
+      ),
+    );
   },
 );
 

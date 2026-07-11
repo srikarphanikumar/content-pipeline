@@ -18,6 +18,8 @@ export type LinkedInUserInfo = {
   email?: string;
 };
 
+const linkedInVersion = process.env.LINKEDIN_API_VERSION || "202606";
+
 function requiredEnv(name: string) {
   const value = process.env[name];
 
@@ -78,4 +80,151 @@ export async function fetchLinkedInUserInfo(accessToken: string) {
   }
 
   return (await response.json()) as LinkedInUserInfo;
+}
+
+function linkedInPostUrl(postUrn: string) {
+  return `https://www.linkedin.com/feed/update/${encodeURIComponent(postUrn)}/`;
+}
+
+async function uploadLinkedInImage({
+  accessToken,
+  ownerUrn,
+  imageUrl,
+}: {
+  accessToken: string;
+  ownerUrn: string;
+  imageUrl: string;
+}) {
+  const initializeResponse = await fetch(
+    "https://api.linkedin.com/rest/images?action=initializeUpload",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "Linkedin-Version": linkedInVersion,
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        initializeUploadRequest: {
+          owner: ownerUrn,
+        },
+      }),
+    },
+  );
+
+  if (!initializeResponse.ok) {
+    throw new Error(
+      `LinkedIn image upload initialization failed: ${initializeResponse.status} ${await initializeResponse.text()}`,
+    );
+  }
+
+  const initialized = (await initializeResponse.json()) as {
+    value?: {
+      uploadUrl?: string;
+      image?: string;
+    };
+  };
+  const uploadUrl = initialized.value?.uploadUrl;
+  const imageUrn = initialized.value?.image;
+
+  if (!uploadUrl || !imageUrn) {
+    throw new Error("LinkedIn image upload initialization returned no upload URL.");
+  }
+
+  const imageResponse = await fetch(imageUrl);
+
+  if (!imageResponse.ok) {
+    throw new Error(`Could not fetch cover image: ${imageResponse.status} ${await imageResponse.text()}`);
+  }
+
+  const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+  const imageBytes = await imageResponse.arrayBuffer();
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType,
+    },
+    body: imageBytes,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`LinkedIn image upload failed: ${uploadResponse.status} ${await uploadResponse.text()}`);
+  }
+
+  return imageUrn;
+}
+
+export async function publishLinkedInPost({
+  accessToken,
+  memberId,
+  title,
+  text,
+  imageUrl,
+}: {
+  accessToken: string;
+  memberId: string;
+  title?: string | null;
+  text: string;
+  imageUrl?: string | null;
+}) {
+  if (!text.trim()) {
+    throw new Error("LinkedIn post copy is required.");
+  }
+
+  if (!memberId) {
+    throw new Error("LinkedIn member id is missing. Reconnect LinkedIn from Settings.");
+  }
+
+  const authorUrn = `urn:li:person:${memberId}`;
+  const imageUrn = imageUrl
+    ? await uploadLinkedInImage({
+        accessToken,
+        ownerUrn: authorUrn,
+        imageUrl,
+      })
+    : null;
+  const response = await fetch("https://api.linkedin.com/rest/posts", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "Linkedin-Version": linkedInVersion,
+      "X-Restli-Protocol-Version": "2.0.0",
+    },
+    body: JSON.stringify({
+      author: authorUrn,
+      commentary: text.trim(),
+      visibility: "PUBLIC",
+      distribution: {
+        feedDistribution: "MAIN_FEED",
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
+      },
+      ...(imageUrn
+        ? {
+            content: {
+              media: {
+                altText: title || "Under The Hood article cover image",
+                id: imageUrn,
+                title: title || "Under The Hood",
+              },
+            },
+          }
+        : {}),
+      lifecycleState: "PUBLISHED",
+      isReshareDisabledByAuthor: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`LinkedIn post failed: ${response.status} ${await response.text()}`);
+  }
+
+  const postUrn = response.headers.get("x-restli-id");
+
+  return {
+    externalId: postUrn,
+    externalUrl: postUrn ? linkedInPostUrl(postUrn) : null,
+  };
 }

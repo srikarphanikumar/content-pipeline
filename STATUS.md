@@ -1,6 +1,6 @@
 # Under The Hood Content Pipeline Status
 
-Last updated: July 10, 2026
+Last updated: July 11, 2026
 
 ## Current Deployment
 
@@ -57,9 +57,13 @@ ADMIN_EMAIL
 ALLOW_ADMIN_SIGNUP              should be false after admin account exists
 DEVTO_API_KEY
 OPENAI_API_KEY
+OPENAI_IMAGE_MODEL              optional, defaults to gpt-image-2
+OPENAI_IMAGE_SIZE               optional, defaults to 1536x1024
+BLOB_READ_WRITE_TOKEN           Vercel Blob token for generated cover images
 LINKEDIN_CLIENT_ID
 LINKEDIN_CLIENT_SECRET
 LINKEDIN_REDIRECT_URI
+LINKEDIN_API_VERSION            optional, defaults to 202606
 BLUESKY_HANDLE
 BLUESKY_APP_PASSWORD
 ```
@@ -257,6 +261,8 @@ Admin currently:
 - Can connect LinkedIn through OAuth and store the platform connection.
 - Shows Bluesky env configuration status.
 - Can generate and edit LinkedIn/Bluesky promotion copy from post edit pages.
+- Can post saved LinkedIn and Bluesky promotion copy from post edit pages.
+- Stores LinkedIn and Bluesky posting status, external ids/URLs, publish timestamps, and errors.
 - Uses a shared black/orange admin shell with persistent navigation.
 
 ### 5. Neon Auth
@@ -426,7 +432,7 @@ Still needed:
 
 ### Social Promotion Setup
 
-LinkedIn OAuth setup and promotion copy generation are implemented. Bluesky env setup is configured and visible in settings. Posting to LinkedIn/Bluesky and Mastodon are not wired yet.
+LinkedIn OAuth setup and promotion copy generation are implemented. Bluesky env setup is configured and visible in settings. Posting to LinkedIn and Bluesky is wired from the post workspace. Mastodon is not wired yet.
 
 Implemented:
 
@@ -440,34 +446,57 @@ Implemented:
 - OpenAI promotion copy generator.
 - Promotion assets stored in `PromotionAsset`.
 - Editable LinkedIn post, LinkedIn first comment, and Bluesky post drafts.
+- LinkedIn post API call using saved LinkedIn copy.
+- LinkedIn image upload through Images API when `coverImageUrl` exists.
+- Bluesky post API call using the saved Bluesky copy.
+- LinkedIn and Bluesky platform publication status/error tracking.
 
 Needed:
 
-- LinkedIn post API call after promotion copy is generated.
-- Bluesky post API call after promotion copy is generated.
+- Optional LinkedIn first-comment publishing.
+- Rich Bluesky link facets/cards if desired.
 - Mastodon connection setup if that channel becomes useful.
 
-### No AI Draft Generation Yet
+### Topic / Draft Pipeline
 
-The admin has a topic backlog, but does not yet generate topics or drafts automatically.
+The admin now separates the imported/published archive from the future post queue.
+
+Implemented:
+
+- `/posts` defaults to the future queue instead of showing imported Substack posts.
+- Imported Substack posts live under `/posts?view=archive`.
+- `/topics` is the idea backlog and excludes completed topics from the active list.
+- `Suggest next topics` CTA checks:
+  - already-published/imported post titles
+  - current post queue
+  - existing topic backlog
+- Suggested ideas are created as `Topic` rows with `backlog` status.
+- OpenAI is used when `OPENAI_API_KEY` exists; deterministic fallback ideas are available otherwise.
 
 Needed:
 
-- Prompt templates.
-- AI topic generation.
 - Draft generation flow.
 - 20-post buffer automation.
 
-### No Image Generation Yet
+### Image Generation
 
-Imported posts have Substack images, but new image generation is not implemented.
+Imported posts have Substack images, and new/generated posts can now get AI-generated cover images.
+
+Implemented:
+
+- OpenAI image generation for post cover images.
+- Editorial article-cover prompt based on title, subtitle, description, tags, and body excerpt.
+- Vercel Blob storage for durable public image URLs.
+- Admin post workspace preview and generate/regenerate action.
+- Generated image URL stored in `Post.coverImageUrl`.
+- Blog and dev.to automatically use `coverImageUrl`.
+- LinkedIn posting uploads the cover image and creates an image-backed post when available.
 
 Needed:
 
-- Image prompt generation.
-- OpenAI/Google image API.
-- Store generated image URL.
-- Regenerate/approve flow.
+- Optional Nano Banana/Gemini provider.
+- Optional explicit approve/reject history for generated variants.
+- Optional per-platform crop/aspect variants.
 
 ### No Production Subscriber Analytics Yet
 
@@ -508,7 +537,7 @@ The 50 sitemap imports are working, but Substack HTML is complex. We should spot
 
 ## Recommended Next Steps
 
-### Immediate Next Step: UX Pass
+### Completed UX Pass
 
 The first UX pass is underway and the core MVP loop now works:
 
@@ -520,6 +549,7 @@ dev.to draft creation
 LinkedIn OAuth
 Bluesky setup
 Promotion copy generation
+LinkedIn/Bluesky posting actions
 ```
 
 Implemented in this pass:
@@ -528,10 +558,13 @@ Implemented in this pass:
 - Persistent links to Dashboard, Posts, Topics, Subscribers, Settings, and Blog.
 - Dashboard replaced stale BRD/dummy queue with live workflow cards.
 - Posts list now has status filters, clearer status badges, and row-level navigation.
+- Posts list now separates Queue, Imported archive, and All posts.
 - Post workspace now groups Blog, dev.to, Promotion, and Edit sections.
 - Copy-to-clipboard controls for generated promotion assets.
+- LinkedIn and Bluesky publish controls with status, links, and errors.
 - Settings page redesigned as provider status cards.
 - Topic backlog page added with topic creation and status updates.
+- Topic backlog page added next-topic generation from published titles and queue state.
 
 Still useful to improve:
 
@@ -540,23 +573,13 @@ Still useful to improve:
 - Optional active nav state.
 - More detailed topic-to-post conversion flow.
 
-### After UX: Posting Actions
+### Immediate Next Step: Draft/Topic Pipeline
 
 Build:
 
-- Post generated Bluesky copy through the Bluesky API.
-- Post generated LinkedIn copy through the LinkedIn API.
-- Store posted URLs/statuses in `PlatformPublication`.
-- Add retry/error states for failed platform posts.
-
-### After Posting: Draft/Topic Pipeline
-
-Build:
-
-- Topic backlog UI.
-- OpenAI topic generation.
-- Draft generation flow.
-- Ready-buffer workflow for maintaining 20 draft-ready posts.
+- Convert selected backlog topics into draft posts.
+- Add draft generation flow from a topic.
+- Add ready-buffer workflow for maintaining 20 draft-ready posts.
 
 ### Later Improvements
 
@@ -566,7 +589,7 @@ Build:
 - Resend confirmation email action from admin for pending subscribers.
 - Subscriber CSV export.
 - Weekly digest generation/manual send flow.
-- Image generation for new posts.
+- Optional Nano Banana/Gemini image provider.
 - UTM parsing and conversion reporting.
 - Auto-classify imported posts into richer topics/tags.
 - Novelty scoring.
@@ -631,14 +654,17 @@ Done:
 - Blog theme refreshed.
 - Archive and article pages functional.
 - Full sitemap importer available.
+- Subscriber capture, email confirmation, and unsubscribe.
+- dev.to draft creation.
+- Promotion copy generation.
+- LinkedIn and Bluesky promotion posting.
+- Imported archive and future queue are separated.
+- Backlog topic suggestions can be generated from published titles and current queue state.
 
 Still to build:
 
-- Real subscriber capture.
-- Email confirmation and unsubscribe.
-- dev.to publishing.
-- Promotion copy generation.
-- Topic/draft generation.
+- Update/publish existing dev.to drafts.
+- Topic-to-draft generation.
 - 20-post buffer workflows.
 - Analytics.
 - New post generation and syndication pipeline.

@@ -43,5 +43,6 @@ export type {
   PlatformPublishStatus,
   Post,
   PostStatus,
+  PromotionAssetType,
   SubscriberStatus,
 } from "@prisma/client";

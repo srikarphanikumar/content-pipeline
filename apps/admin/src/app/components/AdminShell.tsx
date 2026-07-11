@@ -3,11 +3,21 @@ import type React from "react";
 import { signOut } from "../auth/sign-out/actions";
 
 const navItems = [
-  { href: "/", label: "Dashboard" },
+  { href: "/", label: "Pipeline" },
+  { href: "/topics", label: "Ideas" },
   { href: "/posts", label: "Posts" },
-  { href: "/topics", label: "Topics" },
-  { href: "/subscribers", label: "Subscribers" },
-  { href: "/settings", label: "Settings" },
+  { href: "/import/substack", label: "Import" },
+  { href: "/subscribers", label: "Readers" },
+  { href: "/settings", label: "Integrations" },
+];
+
+const workflowItems = [
+  { href: "/topics", label: "1. Ideas" },
+  { href: "/posts?status=DRAFT_READY", label: "2. Drafts" },
+  { href: "/posts?status=READY_TO_PUBLISH", label: "3. Ready" },
+  { href: "/posts?view=archive", label: "4. Syndicate" },
+  { href: "/posts?view=archive", label: "5. Promote" },
+  { href: "/subscribers", label: "6. Readers" },
 ];
 
 type AdminShellProps = {
@@ -64,6 +74,17 @@ export function AdminShell({
               </button>
             </form>
           </nav>
+        </div>
+        <div className="mx-auto flex max-w-[96rem] gap-2 overflow-x-auto px-6 pb-4 text-xs font-semibold">
+          {workflowItems.map((item) => (
+            <Link
+              className="shrink-0 rounded-md border border-white/10 bg-black/25 px-3 py-2 text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
+              href={item.href}
+              key={item.label}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
       </header>
 

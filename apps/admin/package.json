@@ -11,6 +11,7 @@
   "dependencies": {
     "@content-pipeline/db": "*",
     "@neondatabase/auth": "0.4.2-beta",
+    "@vercel/blob": "2.6.1",
     "dotenv": "17.4.2",
     "fast-xml-parser": "5.9.3",
     "next": "16.2.10",

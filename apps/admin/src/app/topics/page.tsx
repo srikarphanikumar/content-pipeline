@@ -1,6 +1,6 @@
 import { db } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink } from "../components/AdminShell";
-import { createTopic, updateTopicStatus } from "./actions";
+import { createTopic, generateNextBacklogTopics, updateTopicStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,17 +15,42 @@ const statusStyles: Record<string, string> = {
 };
 
 export default async function TopicsPage() {
-  const topics = await db.topic.findMany({
-    orderBy: [{ updatedAt: "desc" }],
-    include: {
-      posts: {
-        select: {
-          id: true,
-          title: true,
+  const [topics, publishedPostCount, queuePostCount] = await Promise.all([
+    db.topic.findMany({
+      orderBy: [{ updatedAt: "desc" }],
+      include: {
+        posts: {
+          select: {
+            id: true,
+            title: true,
+          },
         },
       },
-    },
-  });
+    }),
+    db.post.count({
+      where: {
+        OR: [
+          {
+            sourcePlatform: "SUBSTACK",
+          },
+          {
+            publishedAt: {
+              not: null,
+            },
+          },
+        ],
+      },
+    }),
+    db.post.count({
+      where: {
+        status: {
+          in: ["IDEA", "SELECTED", "DRAFTING", "DRAFT_READY", "READY_TO_PUBLISH"],
+        },
+      },
+    }),
+  ]);
+  const activeTopics = topics.filter((topic) => topic.status !== "done");
+  const doneTopics = topics.filter((topic) => topic.status === "done");
 
   const counts = statuses.map((status) => ({
     status,
@@ -39,6 +64,40 @@ export default async function TopicsPage() {
       eyebrow="Planning"
       title="Topic backlog"
     >
+      <section className="mb-6 grid gap-4 rounded-lg border border-orange-400/30 bg-orange-500/10 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-300">
+            Next-topic engine
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold text-white">
+            Build the backlog from what already shipped
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-orange-100/80">
+            This checks the published archive, the current queue, and existing
+            backlog titles, then adds fresh future-facing topic ideas.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
+              Published archive: {publishedPostCount}
+            </span>
+            <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
+              Queue posts: {queuePostCount}
+            </span>
+            <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
+              Backlog topics: {activeTopics.length}
+            </span>
+          </div>
+        </div>
+        <form action={generateNextBacklogTopics}>
+          <button
+            className="h-11 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
+            type="submit"
+          >
+            Suggest next topics
+          </button>
+        </form>
+      </section>
+
       <div className="grid gap-3 md:grid-cols-5">
         {counts.map((item) => (
           <section
@@ -117,13 +176,13 @@ export default async function TopicsPage() {
         </section>
 
         <section className="overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
-          {topics.length === 0 ? (
+          {activeTopics.length === 0 ? (
             <div className="p-8 text-zinc-400">
-              No topics yet. Add ideas here so the ready-buffer work has a real queue.
+              No active backlog topics yet. Add ideas manually or generate the next set.
             </div>
           ) : (
             <div className="divide-y divide-white/10">
-              {topics.map((topic) => (
+              {activeTopics.map((topic) => (
                 <article className="grid gap-4 p-5 xl:grid-cols-[1fr_auto]" key={topic.id}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -179,6 +238,27 @@ export default async function TopicsPage() {
           )}
         </section>
       </div>
+
+      {doneTopics.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-white/10 bg-[#141414] p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-500">
+            Completed ideas
+          </p>
+          <p className="mt-2 text-sm text-zinc-400">
+            Done topics stay out of the active backlog.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {doneTopics.slice(0, 24).map((topic) => (
+              <span
+                className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300"
+                key={topic.id}
+              >
+                {topic.title}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </AdminShell>
   );
 }

@@ -70,12 +70,12 @@ export default async function Home() {
 
   const stats = [
     { href: "/posts", label: "Ready posts", value: `${readyPosts} / 20`, tone: "Buffer target" },
-    { href: "/posts", label: "Imported posts", value: `${importedPosts} / 50`, tone: "Archive owned" },
+    { href: "/posts?view=archive", label: "Imported posts", value: `${importedPosts} / 50`, tone: "Archive owned" },
     { href: "/posts", label: "This week", value: `${postsPublishedThisWeek} / 5`, tone: "Publishing pace" },
     { href: "/subscribers", label: "Subscribers", value: activeSubscribers.toString(), tone: "Confirmed readers" },
     { href: "/topics", label: "Open topics", value: `${openTopics} / ${Math.max(totalTopics, 1)}`, tone: "Backlog" },
-    { href: "/posts", label: "dev.to drafts", value: devToDrafts.toString(), tone: "Syndication" },
-    { href: "/posts", label: "Promo assets", value: promotionAssets.toString(), tone: "Generated copy" },
+    { href: "/posts?view=archive", label: "dev.to drafts", value: devToDrafts.toString(), tone: "Syndication" },
+    { href: "/posts?view=archive", label: "Promo assets", value: promotionAssets.toString(), tone: "Generated copy" },
   ];
 
   const workflow = [
@@ -92,15 +92,21 @@ export default async function Home() {
       status: `${readyPosts} ready`,
     },
     {
+      title: "Cover images",
+      detail: "Generate or review the visual before sending the post into feed-based channels.",
+      href: "/posts?view=archive",
+      status: "Per post",
+    },
+    {
       title: "dev.to drafts",
       detail: "Create draft syndication posts with canonical links back to the blog.",
-      href: "/posts",
+      href: "/posts?view=archive",
       status: `${devToDrafts} generated`,
     },
     {
-      title: "Promotion copy",
-      detail: "Generate LinkedIn, first comment, and Bluesky copy for each post.",
-      href: "/posts",
+      title: "Promotion",
+      detail: "Generate copy, then post image-backed LinkedIn and short-form Bluesky updates.",
+      href: "/posts?view=archive",
       status: `${promotionAssets} assets`,
     },
     {

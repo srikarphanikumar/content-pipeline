@@ -3,8 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, parseTags, slugify } from "@content-pipeline/db";
-import type { PostStatus } from "@content-pipeline/db";
+import type { Platform, PostStatus, PromotionAssetType } from "@content-pipeline/db";
+import { publishBlueskyPost } from "@/lib/bluesky";
+import { generateAndStoreCoverImage } from "@/lib/cover-image";
 import { createDevToDraft } from "@/lib/devto";
+import { publishLinkedInPost } from "@/lib/linkedin";
 import { generatePromotionCopy } from "@/lib/promotion";
 
 const statuses: PostStatus[] = [
@@ -33,6 +36,77 @@ function statusValue(formData: FormData) {
 function nullableDateValue(formData: FormData, key: string) {
   const value = stringValue(formData, key);
   return value ? new Date(value) : null;
+}
+
+async function promotionAssetContent(postId: string, type: PromotionAssetType) {
+  const asset = await db.promotionAsset.findUnique({
+    where: {
+      postId_type: {
+        postId,
+        type,
+      },
+    },
+  });
+
+  if (!asset?.content.trim()) {
+    throw new Error("Generate and save promotion copy before posting.");
+  }
+
+  return asset.content;
+}
+
+async function startPlatformPublication(postId: string, platform: Platform) {
+  return db.platformPublication.upsert({
+    where: {
+      postId_platform: {
+        postId,
+        platform,
+      },
+    },
+    create: {
+      postId,
+      platform,
+      status: "GENERATED",
+      errorMessage: null,
+    },
+    update: {
+      status: "GENERATED",
+      errorMessage: null,
+    },
+  });
+}
+
+async function markPlatformPublicationPublished(
+  publicationId: string,
+  result: {
+    externalId?: string | null;
+    externalUrl?: string | null;
+  },
+) {
+  await db.platformPublication.update({
+    where: {
+      id: publicationId,
+    },
+    data: {
+      status: "PUBLISHED",
+      externalId: result.externalId || null,
+      externalUrl: result.externalUrl || null,
+      publishedAt: new Date(),
+      errorMessage: null,
+    },
+  });
+}
+
+async function markPlatformPublicationFailed(publicationId: string, error: unknown) {
+  await db.platformPublication.update({
+    where: {
+      id: publicationId,
+    },
+    data: {
+      status: "FAILED",
+      errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
+    },
+  });
 }
 
 export async function createPost(formData: FormData) {
@@ -85,6 +159,33 @@ export async function updatePost(postId: string, formData: FormData) {
       status: statusValue(formData),
       canonicalUrl: stringValue(formData, "canonicalUrl") || null,
       publishedAt: nullableDateValue(formData, "publishedAt"),
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function generateCoverImageForPost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  const coverImageUrl = await generateAndStoreCoverImage(post);
+
+  await db.post.update({
+    where: {
+      id: postId,
+    },
+    data: {
+      coverImageUrl,
     },
   });
 
@@ -290,5 +391,82 @@ export async function updatePromotionAssetsForPost(postId: string, formData: For
     }),
   ]);
 
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function publishLinkedInPromotionForPost(postId: string) {
+  const [post, linkedInPost, connection] = await Promise.all([
+    db.post.findUnique({
+      where: {
+        id: postId,
+      },
+    }),
+    promotionAssetContent(postId, "LINKEDIN_POST"),
+    db.platformConnection.findUnique({
+      where: {
+        platform: "LINKEDIN",
+      },
+    }),
+  ]);
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (!connection) {
+    throw new Error("Connect LinkedIn from Settings before posting.");
+  }
+
+  const publication = await startPlatformPublication(postId, "LINKEDIN");
+
+  try {
+    const result = await publishLinkedInPost({
+      accessToken: connection.accessToken,
+      imageUrl: post.coverImageUrl,
+      memberId: connection.providerAccountId || "",
+      title: post.title,
+      text: linkedInPost,
+    });
+
+    await markPlatformPublicationPublished(publication.id, result);
+    await db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "PROMOTED_LINKEDIN",
+      },
+    });
+  } catch (error) {
+    await markPlatformPublicationFailed(publication.id, error);
+    throw error;
+  }
+
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function publishBlueskyPromotionForPost(postId: string) {
+  const blueskyPost = await promotionAssetContent(postId, "BLUESKY_POST");
+  const publication = await startPlatformPublication(postId, "BLUESKY");
+
+  try {
+    const result = await publishBlueskyPost(blueskyPost);
+
+    await markPlatformPublicationPublished(publication.id, result);
+    await db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "PROMOTED_SOCIAL",
+      },
+    });
+  } catch (error) {
+    await markPlatformPublicationFailed(publication.id, error);
+    throw error;
+  }
+
+  revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
 }

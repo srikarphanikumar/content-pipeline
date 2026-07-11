@@ -6,7 +6,7 @@ import {
   createTopic,
   clearAllTopics,
   deleteTopic,
-  generateNextBacklogTopics,
+  generateNextBacklogTopicsFromForm,
   selectAllBacklogTopics,
   updateTopic,
   updateTopicStatus,
@@ -24,7 +24,15 @@ const statusStyles: Record<string, string> = {
   done: "bg-zinc-700 text-zinc-300",
 };
 
-export default async function TopicsPage() {
+type TopicsPageProps = {
+  searchParams: Promise<{
+    generated?: string;
+    source?: string;
+  }>;
+};
+
+export default async function TopicsPage({ searchParams }: TopicsPageProps) {
+  const { generated, source } = await searchParams;
   const [topics, publishedPostCount, queuePostCount] = await Promise.all([
     db.topic.findMany({
       orderBy: [{ updatedAt: "desc" }],
@@ -75,6 +83,14 @@ export default async function TopicsPage() {
       eyebrow="Planning"
       title="Topic backlog"
     >
+      {generated ? (
+        <div className="mb-4 rounded-md border border-orange-400/30 bg-orange-500/10 p-3 text-sm text-orange-100">
+          {generated === "error"
+            ? "Topic generation failed. Check Vercel logs or use the JSON endpoint for details."
+            : `Created ${generated} new topic${generated === "1" ? "" : "s"}${source ? ` via ${source}` : ""}.`}
+        </div>
+      ) : null}
+
       <section className="mb-6 grid gap-4 rounded-lg border border-orange-400/30 bg-orange-500/10 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-300">
@@ -99,7 +115,7 @@ export default async function TopicsPage() {
             </span>
           </div>
         </div>
-        <form action={generateNextBacklogTopics}>
+        <form action={generateNextBacklogTopicsFromForm}>
           <SubmitButton
             className="h-11 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
             pendingLabel="Suggesting..."

@@ -234,7 +234,15 @@ export default async function Home({ searchParams }: HomeProps) {
       <footer className="border-t border-white/10 px-6 py-8 text-sm text-zinc-500">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p>Under The Hood</p>
-          <p>Canonical home: blog.mspk.me</p>
+          <div className="flex flex-wrap gap-4">
+            <Link className="transition hover:text-orange-300" href="/privacy">
+              Privacy
+            </Link>
+            <Link className="transition hover:text-orange-300" href="/terms">
+              Terms
+            </Link>
+            <p>Canonical home: blog.mspk.me</p>
+          </div>
         </div>
       </footer>
     </main>

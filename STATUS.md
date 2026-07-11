@@ -472,16 +472,24 @@ Implemented:
   - existing topic backlog
 - Suggested ideas are created as `Topic` rows with `backlog` status.
 - OpenAI is used when `OPENAI_API_KEY` exists; deterministic fallback ideas are available otherwise.
+- Topic generation is biased toward uncommon AI + accessibility + frontend ideas.
+- Topics can be cleared in bulk from the Ideas page.
 - Backlog topics can be bulk-moved to `selected`.
 - A topic can now create a linked draft post and redirect into the post workspace.
 - Draft generation uses OpenAI when available and a structured fallback draft otherwise.
 - Draft generation now samples published post excerpts and prompts for a 1200-1800 word, human, Under The Hood voice.
 - Daily Inngest function tops up active backlog topics when the count drops below 20.
+- Daily Inngest draft-buffer function creates at most 2 `DRAFTING` posts from selected topics when the draft-ready buffer is below 20.
+- Inngest-generated drafts also generate and store cover images immediately.
+- Generated draft headings use `##` sections for dev.to visibility.
+- Morning WhatsApp summary reports ready posts, drafts needing review, platform activity, and failures.
+- Nightly WhatsApp summary reports dev.to/Bluesky stats where available, LinkedIn status, and next-day selected topics.
 
 Needed:
 
 - Draft quality/review improvements.
-- 20-post buffer automation.
+- Review/approval workflow for generated `DRAFTING` posts.
+- LinkedIn analytics permissions for impression metrics.
 
 ### Image Generation
 

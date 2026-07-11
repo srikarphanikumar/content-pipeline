@@ -44,41 +44,41 @@ function scoreValue(value: unknown) {
 function fallbackTopics(publishedTitles: string[], existingTitles: string[]): GeneratedTopic[] {
   const baseIdeas = [
     {
-      title: "What actually happens during React hydration",
+      title: "What happens when AI-generated UI forgets accessibility",
       description:
-        "Explain the browser, DOM, and React runtime handoff that turns server-rendered markup into an interactive app.",
-      noveltyScore: 8,
+        "Explore the hidden accessibility failures that show up when AI generates frontend components without semantic intent.",
+      noveltyScore: 9,
       audienceFit: 9,
-      difficulty: 6,
-    },
-    {
-      title: "Why CSS layout bugs are browser engine bugs in disguise",
-      description:
-        "Walk through layout calculation, containment, overflow, stacking contexts, and how to debug layout from first principles.",
-      noveltyScore: 8,
-      audienceFit: 8,
-      difficulty: 6,
-    },
-    {
-      title: "How JavaScript promises move through the event loop",
-      description:
-        "A practical deep dive into microtasks, macrotasks, rendering checkpoints, and production async timing bugs.",
-      noveltyScore: 7,
-      audienceFit: 9,
-      difficulty: 5,
-    },
-    {
-      title: "The hidden cost of client-side state synchronization",
-      description:
-        "Compare URL state, server state, local component state, caches, and queues through real frontend architecture tradeoffs.",
-      noveltyScore: 7,
-      audienceFit: 8,
       difficulty: 7,
     },
     {
-      title: "How AI features change frontend architecture",
+      title: "Why AI copilots keep producing inaccessible forms",
       description:
-        "Cover streaming responses, optimistic UI, tool calls, background jobs, and where AI work belongs in a product stack.",
+        "Break down labels, names, descriptions, validation, keyboard paths, and why visually-correct forms still fail users.",
+      noveltyScore: 9,
+      audienceFit: 9,
+      difficulty: 6,
+    },
+    {
+      title: "The frontend accessibility bugs automated tests still miss",
+      description:
+        "Map the gap between lint rules, axe checks, real assistive technology behavior, focus order, and browser defaults.",
+      noveltyScore: 8,
+      audienceFit: 9,
+      difficulty: 7,
+    },
+    {
+      title: "How to review AI-generated React components for accessibility",
+      description:
+        "Build a practical review model for semantic HTML, ARIA, focus management, keyboard flows, and user-visible states.",
+      noveltyScore: 9,
+      audienceFit: 8,
+      difficulty: 6,
+    },
+    {
+      title: "Why accessible frontend architecture starts before the component",
+      description:
+        "Explain how product state, copy, error design, async flows, and interaction models shape accessibility before JSX exists.",
       noveltyScore: 9,
       audienceFit: 9,
       difficulty: 7,
@@ -135,19 +135,19 @@ function draftFallback(topic: {
       "",
       "That is usually the sign that the abstraction is hiding a real mechanism underneath.",
       "",
-      "#### What is actually happening",
+      "## What is actually happening",
       "",
       "The important thing is not the API surface. The important thing is the sequence of work the browser or runtime has to do.",
       "",
       "Once you understand that sequence, the bug becomes much less mysterious.",
       "",
-      "#### The debugging model",
+      "## The debugging model",
       "",
       "Start by asking what changed, where the work moved, and whether the thing you are looking at is happening on the main thread, the network, the browser engine, or your framework.",
       "",
       "That mental model is usually more useful than memorizing one more rule.",
       "",
-      "#### The practical takeaway",
+      "## The practical takeaway",
       "",
       "- Identify the core mechanism.",
       "- Name the tradeoff.",
@@ -162,6 +162,8 @@ function cleanGeneratedDraft(value: string) {
     .replace(/—/g, ", ")
     .replace(/–/g, "-")
     .replace(/^# .+\n+/, "")
+    .replace(/^#### /gm, "## ")
+    .replace(/^### /gm, "## ")
     .replace(/\n#{1,2} Conclusion\b[\s\S]*$/i, "")
     .replace(/\n#{1,2} References\b[\s\S]*$/i, "")
     .replace(/\n#{1,2} Further Reading\b[\s\S]*$/i, "")
@@ -304,8 +306,10 @@ export async function generateNextBacklogTopics() {
             "Rules:",
             "- Do not duplicate or lightly rename already published titles.",
             "- Do not duplicate current queue or topic titles.",
-            "- Favor concrete, technical, high-signal topics that can become deep engineering essays.",
-            "- Each idea should fit the Under The Hood style: explain mechanisms, tradeoffs, debugging, and production implications.",
+            "- Favor AI + accessibility + frontend topics, especially uncommon angles that are not already over-covered.",
+            "- Avoid generic accessibility checklists and generic AI takes.",
+            "- Prefer concrete browser, React, DOM, ARIA, focus, keyboard, screen reader, design system, AI-generated UI, or frontend architecture mechanisms.",
+            "- Each idea should fit the Under The Hood style: explain mechanisms, tradeoffs, debugging, review models, and production implications.",
             "- Return JSON with key topics, an array of objects: title, description, noveltyScore, audienceFit, difficulty.",
             "- Scores are integers from 1 to 10.",
             "",
@@ -391,7 +395,15 @@ export async function selectAllBacklogTopics() {
   revalidatePath("/topics");
 }
 
-export async function createDraftPostFromTopic(topicId: string) {
+export async function clearAllTopics() {
+  await db.topic.deleteMany();
+
+  revalidatePath("/");
+  revalidatePath("/topics");
+  revalidatePath("/posts");
+}
+
+export async function createDraftPostRecordFromTopic(topicId: string) {
   const topic = await db.topic.findUnique({
     where: {
       id: topicId,
@@ -411,7 +423,7 @@ export async function createDraftPostFromTopic(topicId: string) {
   }
 
   if (topic.posts[0]) {
-    redirect(`/posts/${topic.posts[0].id}`);
+    return topic.posts[0].id;
   }
 
   let draft = draftFallback(topic);
@@ -470,7 +482,7 @@ export async function createDraftPostFromTopic(topicId: string) {
             "- Explain the mechanism under the hood, but avoid sounding like documentation.",
             "- Prefer concrete examples over abstract claims.",
             "- Do not include a top-level H1 in bodyMarkdown. The app already renders the title.",
-            "- Use #### headings, not numbered sections.",
+            "- Use ## headings for major sections. Do not use tiny #### headings because they are too subtle on dev.to.",
             "- Do not include a References section.",
             "- Do not include a generic Conclusion heading.",
             "- Avoid em dashes entirely.",
@@ -542,5 +554,10 @@ export async function createDraftPostFromTopic(topicId: string) {
   revalidatePath("/");
   revalidatePath("/topics");
   revalidatePath("/posts");
-  redirect(`/posts/${post.id}`);
+  return post.id;
+}
+
+export async function createDraftPostFromTopic(topicId: string) {
+  const postId = await createDraftPostRecordFromTopic(topicId);
+  redirect(`/posts/${postId}`);
 }

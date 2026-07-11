@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Post, PostStatus } from "@content-pipeline/db";
 import { SubmitButton } from "../components/SubmitButton";
 
@@ -26,6 +31,8 @@ type PostFormProps = {
 };
 
 export function PostForm({ action, post }: PostFormProps) {
+  const [bodyMarkdown, setBodyMarkdown] = useState(post?.bodyMarkdown || "");
+
   return (
     <form action={action} className="grid gap-5">
       <label className={labelClass}>
@@ -113,15 +120,42 @@ export function PostForm({ action, post }: PostFormProps) {
         />
       </label>
 
-      <label className={labelClass}>
-        Body Markdown
-        <textarea
-          className={`${textareaClass} min-h-[520px] font-mono text-sm leading-6`}
-          name="bodyMarkdown"
-          required
-          defaultValue={post?.bodyMarkdown || ""}
-        />
-      </label>
+      <section className="grid gap-4">
+        <div>
+          <p className="text-sm font-semibold text-zinc-300">Body Markdown</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            Edit on the left, read the rendered draft on the right.
+          </p>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          <label className="grid gap-2 text-sm font-semibold text-zinc-300">
+            Markdown
+            <textarea
+              className={`${textareaClass} min-h-[680px] font-mono text-sm leading-6`}
+              name="bodyMarkdown"
+              onChange={(event) => setBodyMarkdown(event.target.value)}
+              required
+              value={bodyMarkdown}
+            />
+          </label>
+          <div className="grid gap-2 text-sm font-semibold text-zinc-300">
+            Preview
+            <article className="min-h-[680px] overflow-y-auto rounded-md border border-white/10 bg-[#f8f3eb] px-6 py-6 text-stone-950">
+              {bodyMarkdown.trim() ? (
+                <div className="prose prose-stone max-w-none prose-headings:font-semibold prose-pre:overflow-x-auto prose-pre:rounded-lg prose-pre:bg-stone-950 prose-pre:p-4 prose-pre:text-stone-100">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {bodyMarkdown}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-sm font-normal text-stone-500">
+                  Start writing to see the rendered post preview.
+                </p>
+              )}
+            </article>
+          </div>
+        </div>
+      </section>
 
       <SubmitButton
         className="h-11 w-fit rounded-md bg-orange-500 px-5 text-sm font-semibold text-black transition hover:bg-orange-400"

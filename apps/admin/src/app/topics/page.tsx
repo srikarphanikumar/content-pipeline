@@ -4,6 +4,7 @@ import { SubmitButton } from "../components/SubmitButton";
 import {
   createDraftPostFromTopic,
   createTopic,
+  clearAllTopics,
   generateNextBacklogTopics,
   selectAllBacklogTopics,
   updateTopicStatus,
@@ -136,6 +137,29 @@ export default async function TopicsPage() {
             pendingLabel="Selecting..."
           >
             Move all backlog to selected ({backlogCount})
+          </SubmitButton>
+        </form>
+      </section>
+
+      <section className="mt-6 flex flex-col justify-between gap-3 rounded-lg border border-red-400/30 bg-red-500/10 p-5 md:flex-row md:items-center">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-red-300">
+            Reset backlog
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">
+            Clear all topics
+          </h2>
+          <p className="mt-2 text-sm text-red-100/75">
+            Deletes every topic. Existing posts stay in the post queue, but lose
+            their topic link.
+          </p>
+        </div>
+        <form action={clearAllTopics}>
+          <SubmitButton
+            className="h-10 rounded-md border border-red-400 px-4 text-sm font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+            pendingLabel="Clearing..."
+          >
+            Clear all topics
           </SubmitButton>
         </form>
       </section>

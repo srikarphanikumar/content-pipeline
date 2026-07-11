@@ -10,6 +10,7 @@ import {
   deletePipelinePost,
   generateCoverImageForPost,
   generatePromotionAssetsForPost,
+  publishBlogCanonicalPost,
   publishBlueskyPromotionForPost,
   publishLinkedInPromotionForPost,
   recreateDevToDraftForPost,
@@ -46,11 +47,15 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
   const recreateDevToDraftAction = recreateDevToDraftForPost.bind(null, post.id);
   const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
+  const publishBlogAction = publishBlogCanonicalPost.bind(null, post.id);
   const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
   const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
   const publishBlueskyAction = publishBlueskyPromotionForPost.bind(null, post.id);
   const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
   const publicUrl = `https://blog.mspk.me/posts/${post.slug}`;
+  const blogPublication = post.publications.find(
+    (publication) => publication.platform === "BLOG",
+  );
   const devToPublication = post.publications.find(
     (publication) => publication.platform === "DEVTO",
   );
@@ -75,11 +80,24 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
     "DRAFT_READY",
     "READY_TO_PUBLISH",
   ].includes(post.status);
+  const isBlogPublished =
+    blogPublication?.status === "PUBLISHED" ||
+    [
+      "PUBLISHED_BLOG",
+      "PUBLISHED_DEVTO",
+      "PROMOTED_LINKEDIN",
+      "PROMOTED_SOCIAL",
+      "COMPLETE",
+    ].includes(post.status);
   const routeSteps = [
     {
       label: "Canonical",
-      detail: post.bodyMarkdown.trim() ? "Post body exists" : "Add post body",
-      done: Boolean(post.bodyMarkdown.trim()),
+      detail: isBlogPublished
+        ? "Live on blog"
+        : post.bodyMarkdown.trim()
+          ? "Ready to publish"
+          : "Add post body",
+      done: isBlogPublished,
     },
     {
       label: "Cover",
@@ -210,6 +228,21 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
               <p>Status: {post.status.replaceAll("_", " ")}</p>
               <p>Slug: {post.slug}</p>
               <p>Tags: {post.tags.length > 0 ? post.tags.join(", ") : "None"}</p>
+              <p>
+                Canonical:{" "}
+                {isBlogPublished ? (
+                  <a
+                    className="font-semibold text-orange-300 underline-offset-4 hover:underline"
+                    href={blogPublication?.externalUrl || post.canonicalUrl || publicUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Live on blog
+                  </a>
+                ) : (
+                  "Not published"
+                )}
+              </p>
             </div>
             <div className="mt-5 grid gap-3">
               {post.coverImageUrl ? (
@@ -236,6 +269,36 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
               <p className="text-xs leading-5 text-zinc-500">
                 Used by the blog, dev.to, and LinkedIn image posts.
               </p>
+            </div>
+            <div className="mt-5 rounded-md border border-white/10 bg-black/30 p-4">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                <div>
+                  <h3 className="font-semibold text-white">Canonical blog publish</h3>
+                  <p className="mt-1 text-sm leading-6 text-zinc-400">
+                    Make this article visible on blog.mspk.me before syndicating
+                    or promoting it elsewhere.
+                  </p>
+                </div>
+                {isProtectedImport ? (
+                  <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-300">
+                    Imported archive
+                  </span>
+                ) : (
+                  <form action={publishBlogAction}>
+                    <SubmitButton
+                      className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
+                      pendingLabel={isBlogPublished ? "Refreshing..." : "Publishing..."}
+                    >
+                      {isBlogPublished ? "Refresh blog publish" : "Publish blog canonical"}
+                    </SubmitButton>
+                  </form>
+                )}
+              </div>
+              {blogPublication?.errorMessage ? (
+                <p className="mt-3 rounded-md bg-red-500/10 p-3 text-sm text-red-300">
+                  {blogPublication.errorMessage}
+                </p>
+              ) : null}
             </div>
           </section>
 

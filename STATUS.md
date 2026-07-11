@@ -66,6 +66,16 @@ LINKEDIN_REDIRECT_URI
 LINKEDIN_API_VERSION            optional, defaults to 202606
 BLUESKY_HANDLE
 BLUESKY_APP_PASSWORD
+INNGEST_EVENT_KEY
+INNGEST_SIGNING_KEY
+INNGEST_ENV                     production
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_WHATSAPP_FROM            whatsapp:+15559806853
+TWILIO_MESSAGING_SERVICE_SID
+WHATSAPP_TO                     whatsapp:+12038431589
+TWILIO_MORNING_TEMPLATE_SID
+TWILIO_NIGHTLY_TEMPLATE_SID
 ```
 
 Important security note:
@@ -95,6 +105,7 @@ Initial migration has been applied to Neon:
 
 ```txt
 packages/db/prisma/migrations/20260709050350_init_content_pipeline
+packages/db/prisma/migrations/20260711152000_add_notification_deliveries
 ```
 
 Core models currently exist for:
@@ -106,6 +117,7 @@ Core models currently exist for:
 - `PlatformConnection`
 - `PromotionAsset`
 - `Subscriber`
+- `NotificationDelivery`
 
 Important post fields:
 
@@ -240,6 +252,8 @@ Admin routes currently include:
 /settings
 /api/oauth/linkedin/start
 /api/oauth/linkedin/callback
+/api/inngest
+/api/topics/suggest
 ```
 
 Admin currently:
@@ -258,11 +272,14 @@ Admin currently:
 - Can view subscribers by status.
 - Can manually activate or unsubscribe subscribers.
 - Can create dev.to draft articles from post edit pages.
+- Can recreate a dev.to draft if the remote dev.to draft was manually deleted.
 - Can connect LinkedIn through OAuth and store the platform connection.
 - Shows Bluesky env configuration status.
 - Can generate and edit LinkedIn/Bluesky promotion copy from post edit pages.
 - Can post saved LinkedIn and Bluesky promotion copy from post edit pages.
 - Stores LinkedIn and Bluesky posting status, external ids/URLs, publish timestamps, and errors.
+- Can publish the canonical blog post from the post workspace.
+- Records canonical blog publishing as a `BLOG` platform publication.
 - Uses a shared black/orange admin shell with persistent navigation.
 
 ### 5. Neon Auth
@@ -410,6 +427,24 @@ Needed:
 - Weekly digest email generation.
 - Manual send flow from admin.
 
+### WhatsApp Notifications
+
+Twilio WhatsApp production setup is in progress.
+
+Implemented:
+
+- Twilio env configuration is wired in the admin app.
+- WhatsApp sender is configured as `whatsapp:+15559806853`.
+- Recipient is configured as `whatsapp:+12038431589`.
+- Morning and nightly Twilio Content template SIDs are configured.
+- Morning Inngest summary reports selected topic/post readiness and platform outcomes.
+- Nightly Inngest summary reports available platform stats and next-day topic context.
+- Settings page has a test WhatsApp send action and notification delivery logging.
+
+Current blocker:
+
+- WhatsApp business-initiated template approval still needs to become fully green in Twilio/Meta. Inngest can show a successful run even when no WhatsApp arrives if the template/sender approval is still pending or rejected.
+
 ### dev.to Draft Publishing
 
 The BRD calls for dev.to as the main discovery platform. Draft creation is now wired.
@@ -423,6 +458,7 @@ Implemented:
 - Cover image sent to dev.to when `coverImageUrl` exists.
 - dev.to article id/url stored in `PlatformPublication`.
 - dev.to status badge on the admin posts list.
+- dev.to draft can be recreated if the remote draft is manually deleted.
 
 Still needed:
 
@@ -482,13 +518,27 @@ Implemented:
 - Daily Inngest draft-buffer function creates at most 2 `DRAFTING` posts from selected topics when the draft-ready buffer is below 20.
 - Inngest-generated drafts also generate and store cover images immediately.
 - Generated draft headings use `##` sections for dev.to visibility.
+- Topics page has compact bulk controls:
+  - capture idea modal
+  - move all backlog to selected
+  - prepare next selected
+  - draft all selected
+  - copy all topic titles
+  - clear all topics
+- `Prepare next selected` creates one full prepared post from the first selected topic:
+  - canonical article draft
+  - generated cover image
+  - dev.to draft
+  - LinkedIn and Bluesky promo copy
+- `Draft all selected` creates linked draft records in bulk without attempting every expensive platform step in one request.
 - Morning WhatsApp summary reports ready posts, drafts needing review, platform activity, and failures.
 - Nightly WhatsApp summary reports dev.to/Bluesky stats where available, LinkedIn status, and next-day selected topics.
 
 Needed:
 
-- Draft quality/review improvements.
-- Review/approval workflow for generated `DRAFTING` posts.
+- Clearer background job progress for bulk draft creation/preparation.
+- Optional Inngest event to prepare multiple selected posts one-by-one without browser request timeouts.
+- Review/approval workflow between `DRAFT_READY` and `PUBLISHED_BLOG`.
 - LinkedIn analytics permissions for impression metrics.
 
 ### Image Generation
@@ -504,6 +554,7 @@ Implemented:
 - Generated image URL stored in `Post.coverImageUrl`.
 - Blog and dev.to automatically use `coverImageUrl`.
 - LinkedIn posting uploads the cover image and creates an image-backed post when available.
+- `Prepare next selected` generates the cover image as part of the prepared-post workflow.
 
 Needed:
 
@@ -590,12 +641,25 @@ Still useful to improve:
 
 ### Immediate Next Step: Draft/Topic Pipeline
 
-Build:
+The draft/topic pipeline now works end-to-end for one selected topic.
 
-- Convert selected backlog topics into draft posts.
-- Improve generated draft quality and post-review workflow.
-- Add ready-buffer workflow for maintaining 20 draft-ready posts.
-- Expand Inngest automation from topic top-up to draft-buffer health checks.
+Current operator flow:
+
+1. Use `/topics` to keep 40-50 strong selected ideas available.
+2. Click `Prepare next selected`.
+3. Review the generated post workspace.
+4. Edit the canonical Markdown if needed.
+5. Click `Publish blog canonical`.
+6. Open the blog URL and confirm the post is live.
+7. Open the dev.to draft, review it, and publish manually for now.
+8. Publish LinkedIn and Bluesky from the post workspace after the blog is live.
+
+Build next:
+
+- Add an Inngest-backed `Prepare selected queue` automation that prepares selected topics one at a time in the background.
+- Add visible job/run status in the admin so bulk preparation does not look stuck.
+- Add a stricter review state between `DRAFT_READY` and `PUBLISHED_BLOG`.
+- Add dev.to publish/update actions once the manual review loop feels solid.
 
 ### Later Improvements
 
@@ -609,8 +673,6 @@ Build:
 - UTM parsing and conversion reporting.
 - Auto-classify imported posts into richer topics/tags.
 - Novelty scoring.
-- Draft editor.
-- AI-generated Markdown drafts.
 - 20-post ready buffer dashboard.
 
 ## Useful Commands
@@ -658,7 +720,7 @@ npm run repair:substack-images
 
 ## Current Product State
 
-The project is now a working owned archive and private admin foundation.
+The project is now a working owned archive plus a private content operating system.
 
 Done:
 
@@ -672,17 +734,25 @@ Done:
 - Full sitemap importer available.
 - Subscriber capture, email confirmation, and unsubscribe.
 - dev.to draft creation.
+- dev.to draft recreation.
+- AI cover image generation stored in Vercel Blob.
 - Promotion copy generation.
 - LinkedIn and Bluesky promotion posting.
 - Imported archive and future queue are separated.
 - Backlog topic suggestions can be generated from published titles and current queue state.
 - Selected topics can create linked draft posts in the post queue.
+- One selected topic can be prepared into a near-ready post with canonical draft, image, dev.to draft, and social copy.
+- Canonical blog publishing is now an explicit post-workspace action.
 - Admin forms show loading states for long-running actions.
+- Inngest daily topic planning and draft-buffer functions are registered.
+- Twilio WhatsApp summaries are wired but waiting on production WhatsApp/template approval.
 
 Still to build:
 
-- Update/publish existing dev.to drafts.
-- Topic-to-draft review workflow.
-- 20-post buffer workflows.
+- Background bulk preparation for selected topics through Inngest.
+- Clear admin-visible job status/progress for bulk/background work.
+- Review/approval workflow before canonical publishing.
+- Update/publish existing dev.to drafts from admin.
+- LinkedIn impression analytics permissions/reporting.
+- WhatsApp delivery confirmation once Twilio approval is green.
 - Analytics.
-- New post generation and syndication pipeline.

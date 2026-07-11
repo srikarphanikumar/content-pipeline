@@ -29,6 +29,21 @@ const queueStatuses: PostStatus[] = [
   "DRAFT_READY",
   "READY_TO_PUBLISH",
 ];
+const blogPublishedStatuses: PostStatus[] = [
+  "PUBLISHED_BLOG",
+  "PUBLISHED_DEVTO",
+  "PROMOTED_LINKEDIN",
+  "PROMOTED_SOCIAL",
+  "COMPLETE",
+];
+
+function blogBaseUrl() {
+  return (process.env.BLOG_BASE_URL || "https://blog.mspk.me").replace(/\/$/, "");
+}
+
+function canonicalPostUrl(slug: string) {
+  return `${blogBaseUrl()}/posts/${slug}`;
+}
 
 function stringValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -244,6 +259,73 @@ export async function generateCoverImageForPost(postId: string) {
       coverImageUrl,
     },
   });
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function publishBlogCanonicalPost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (post.sourcePlatform === "SUBSTACK") {
+    throw new Error("Imported Substack archive posts are already canonical and cannot be republished.");
+  }
+
+  if (!post.title.trim() || !post.slug.trim() || !post.bodyMarkdown.trim()) {
+    throw new Error("Title, slug, and body are required before publishing to the blog.");
+  }
+
+  const publishedAt = post.publishedAt || new Date();
+  const canonicalUrl = post.canonicalUrl || canonicalPostUrl(post.slug);
+  const nextStatus = blogPublishedStatuses.includes(post.status)
+    ? post.status
+    : "PUBLISHED_BLOG";
+
+  await db.$transaction([
+    db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: nextStatus,
+        canonicalUrl,
+        publishedAt,
+      },
+    }),
+    db.platformPublication.upsert({
+      where: {
+        postId_platform: {
+          postId,
+          platform: "BLOG",
+        },
+      },
+      create: {
+        postId,
+        platform: "BLOG",
+        status: "PUBLISHED",
+        externalId: post.slug,
+        externalUrl: canonicalUrl,
+        publishedAt,
+        errorMessage: null,
+      },
+      update: {
+        status: "PUBLISHED",
+        externalId: post.slug,
+        externalUrl: canonicalUrl,
+        publishedAt,
+        errorMessage: null,
+      },
+    }),
+  ]);
 
   revalidatePath("/");
   revalidatePath("/posts");

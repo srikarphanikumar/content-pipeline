@@ -6,7 +6,7 @@ import {
   preparePostAssetsForReview,
 } from "@/app/topics/actions";
 import { fetchBlueskyStats, fetchDevToStats } from "@/lib/platform-stats";
-import { sendWhatsAppTemplate } from "@/lib/whatsapp";
+import { pollTwilioMessageStatus, sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { inngest } from "./client";
 
 const activeTopicTarget = 50;
@@ -33,6 +33,7 @@ function notificationDate() {
 
 async function recordWhatsAppDelivery(input: {
   bodyPreview: string;
+  errorCode?: string | null;
   errorMessage?: string | null;
   kind: "MORNING_SUMMARY" | "NIGHTLY_STATS" | "TEST";
   messageSid?: string | null;
@@ -43,6 +44,7 @@ async function recordWhatsAppDelivery(input: {
     data: {
       bodyPreview: input.bodyPreview,
       channel: "WHATSAPP",
+      errorCode: input.errorCode || null,
       errorMessage: input.errorMessage || null,
       kind: input.kind,
       messageSid: input.messageSid || null,
@@ -431,15 +433,22 @@ export const morningPublishingSummary = inngest.createFunction(
         throw new Error(result.reason);
       }
 
+      const status = await pollTwilioMessageStatus(result.sid);
+
       await recordWhatsAppDelivery({
         bodyPreview: body,
+        errorCode: status.errorCode,
+        errorMessage: status.errorMessage,
         kind: "MORNING_SUMMARY",
         messageSid: result.sid,
-        status: result.status,
+        status: status.status,
         templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
       });
 
-      return result;
+      return {
+        ...result,
+        deliveryStatus: status.status,
+      };
     });
   },
 );
@@ -576,15 +585,22 @@ export const nightlyStatsAndTopics = inngest.createFunction(
         throw new Error(result.reason);
       }
 
+      const status = await pollTwilioMessageStatus(result.sid);
+
       await recordWhatsAppDelivery({
         bodyPreview: body,
+        errorCode: status.errorCode,
+        errorMessage: status.errorMessage,
         kind: "NIGHTLY_STATS",
         messageSid: result.sid,
-        status: result.status,
+        status: status.status,
         templateSid: process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
       });
 
-      return result;
+      return {
+        ...result,
+        deliveryStatus: status.status,
+      };
     });
   },
 );

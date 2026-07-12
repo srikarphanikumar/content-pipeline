@@ -16,6 +16,13 @@ export type TwilioMessageStatus = {
   status: string;
 };
 
+const terminalStatuses = new Set([
+  "delivered",
+  "failed",
+  "undelivered",
+  "read",
+]);
+
 function twilioConfigured() {
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID &&
@@ -170,4 +177,25 @@ export async function fetchTwilioMessageStatus(
     sid: result.sid || messageSid,
     status: result.status || "unknown",
   };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function pollTwilioMessageStatus(
+  messageSid: string,
+): Promise<TwilioMessageStatus> {
+  let latest = await fetchTwilioMessageStatus(messageSid);
+
+  for (const delay of [3000, 7000, 15000]) {
+    if (terminalStatuses.has(latest.status)) {
+      return latest;
+    }
+
+    await sleep(delay);
+    latest = await fetchTwilioMessageStatus(messageSid);
+  }
+
+  return latest;
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@content-pipeline/db";
 import {
-  fetchTwilioMessageStatus,
+  pollTwilioMessageStatus,
   sendWhatsAppTemplate,
 } from "@/lib/whatsapp";
 
@@ -20,10 +20,6 @@ function envSummary() {
   if (missing.length > 0) {
     throw new Error(`Missing WhatsApp env vars: ${missing.join(", ")}`);
   }
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function recordDelivery(input: Parameters<typeof db.notificationDelivery.create>[0]["data"]) {
@@ -72,8 +68,7 @@ export async function sendTestWhatsAppNotification() {
       return;
     }
 
-    await sleep(5000);
-    const status = await fetchTwilioMessageStatus(result.sid);
+    const status = await pollTwilioMessageStatus(result.sid);
 
     await recordDelivery({
       bodyPreview: body,

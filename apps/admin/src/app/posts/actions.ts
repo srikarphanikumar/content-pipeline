@@ -834,3 +834,52 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
   // Do not throw from the aggregate action. Each platform action records its own
   // FAILED status and error message, and throwing here crashes the production page.
 }
+
+export async function approveAndPublishPost(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+    select: {
+      sourcePlatform: true,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (post.sourcePlatform === "SUBSTACK") {
+    await recordPlatformFailure(
+      postId,
+      "BLOG",
+      new Error("Imported Substack archive posts cannot be approved for republishing."),
+    );
+    revalidatePath("/posts");
+    revalidatePath(`/posts/${postId}`);
+    return;
+  }
+
+  await db.post.update({
+    where: {
+      id: postId,
+    },
+    data: {
+      status: "READY_TO_PUBLISH",
+    },
+  });
+
+  try {
+    await publishBlogCanonicalPost(postId);
+  } catch (error) {
+    await recordPlatformFailure(postId, "BLOG", error);
+    revalidatePath("/posts");
+    revalidatePath(`/posts/${postId}`);
+    return;
+  }
+
+  await publishSyndicationAndSocialsForPost(postId);
+
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}

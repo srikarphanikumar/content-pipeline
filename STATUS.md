@@ -281,8 +281,10 @@ Admin currently:
 - Can publish the canonical blog post from the post workspace.
 - Records canonical blog publishing as a `BLOG` platform publication.
 - Has top-row post workspace buttons for:
+  - `Approve and publish`
   - `Publish blog`
   - `Post to socials`
+- `Approve and publish` marks a reviewed post ready, publishes the blog canonical, then posts to dev.to, LinkedIn, and Bluesky.
 - `Post to socials` publishes/skips idempotently across dev.to, LinkedIn, and Bluesky.
 - Uses a shared black/orange admin shell with persistent navigation.
 
@@ -445,9 +447,10 @@ Implemented:
 - Nightly Inngest summary reports available platform stats and next-day topic context.
 - Settings page has a test WhatsApp send action and notification delivery logging.
 - Inngest cron schedules now run on weekdays only in `America/New_York` time:
-  - topic planning: 8:00 AM
-  - draft buffer: 8:30 AM
-  - morning summary: 9:00 AM
+  - topic planning: 5:30 AM
+  - draft buffer: 5:45 AM
+  - approval prep: 6:00 AM
+  - morning summary: 6:45 AM
   - nightly stats/topic prep: 9:00 PM
 
 Current blocker:
@@ -542,6 +545,7 @@ Implemented:
   - dev.to draft
   - LinkedIn and Bluesky promo copy
 - `Draft all selected` creates linked draft records in bulk without attempting every expensive platform step in one request.
+- Weekday morning approval prep runs at 6:00 AM ET and ensures at least one pipeline-owned post is `DRAFT_READY` or `READY_TO_PUBLISH` before the morning summary.
 - Morning WhatsApp summary reports ready posts, drafts needing review, platform activity, and failures.
 - Nightly WhatsApp summary reports dev.to/Bluesky stats where available, LinkedIn status, and next-day selected topics.
 
@@ -660,10 +664,8 @@ Current operator flow:
 2. Click `Prepare next selected`.
 3. Review the generated post workspace.
 4. Edit the canonical Markdown if needed.
-5. Click `Publish blog canonical`.
-6. Open the blog URL and confirm the post is live.
-7. Click `Post to socials` after reviewing the dev.to/social copy.
-8. Open dev.to, LinkedIn, and Bluesky links from the post workspace to confirm.
+5. Click `Approve and publish`.
+6. Open the blog, dev.to, LinkedIn, and Bluesky links from the post workspace to confirm.
 
 Build next:
 
@@ -756,9 +758,11 @@ Done:
 - Selected topics can create linked draft posts in the post queue.
 - One selected topic can be prepared into a near-ready post with canonical draft, image, dev.to draft, and social copy.
 - Canonical blog publishing is now an explicit post-workspace action.
+- Reviewed posts can be approved and published everywhere with one button.
 - Admin forms show loading states for long-running actions.
 - Inngest daily topic planning and draft-buffer functions are registered.
 - Inngest schedules are weekday-only in America/New_York time.
+- Inngest prepares a weekday morning approval candidate by 6:45 AM ET.
 - Twilio WhatsApp summaries are wired but waiting on production WhatsApp/template approval.
 
 Still to build:

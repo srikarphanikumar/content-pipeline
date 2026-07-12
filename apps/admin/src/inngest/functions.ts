@@ -2,8 +2,9 @@ import { db } from "@content-pipeline/db";
 import {
   createDraftPostRecordFromTopic,
   generateNextBacklogTopics,
+  prepareNextSelectedTopicForReview,
+  preparePostAssetsForReview,
 } from "@/app/topics/actions";
-import { generateAndStoreCoverImage } from "@/lib/cover-image";
 import { fetchBlueskyStats, fetchDevToStats } from "@/lib/platform-stats";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { inngest } from "./client";
@@ -55,7 +56,7 @@ async function recordWhatsAppDelivery(input: {
 export const dailyPlanning = inngest.createFunction(
   {
     id: "daily-content-planning",
-    triggers: [{ cron: "TZ=America/New_York 0 8 * * 1-5" }],
+    triggers: [{ cron: "TZ=America/New_York 30 5 * * 1-5" }],
   },
   async ({ step }) => {
     const before = await step.run("Count current pipeline state", async () => {
@@ -124,7 +125,7 @@ export const dailyPlanning = inngest.createFunction(
 export const dailyDraftBuffer = inngest.createFunction(
   {
     id: "daily-draft-buffer",
-    triggers: [{ cron: "TZ=America/New_York 30 8 * * 1-5" }],
+    triggers: [{ cron: "TZ=America/New_York 45 5 * * 1-5" }],
   },
   async ({ step }) => {
     const before = await step.run("Count draft buffer", async () => {
@@ -199,7 +200,7 @@ export const dailyDraftBuffer = inngest.createFunction(
     );
 
     const createdDraftPostIds: string[] = [];
-    const generatedCoverImages: Array<{ postId: string; coverImageUrl: string }> = [];
+    const preparedPostIds: string[] = [];
 
     for (const topic of selectedTopics) {
       const postId = await step.run(`Create draft for ${topic.title}`, async () =>
@@ -207,35 +208,10 @@ export const dailyDraftBuffer = inngest.createFunction(
       );
       createdDraftPostIds.push(postId);
 
-      const coverImageUrl = await step.run(`Generate cover image for ${topic.title}`, async () => {
-        const post = await db.post.findUnique({
-          where: {
-            id: postId,
-          },
-        });
-
-        if (!post) {
-          throw new Error(`Post ${postId} was not found after draft creation.`);
-        }
-
-        const generatedUrl = await generateAndStoreCoverImage(post);
-
-        await db.post.update({
-          where: {
-            id: postId,
-          },
-          data: {
-            coverImageUrl: generatedUrl,
-          },
-        });
-
-        return generatedUrl;
-      });
-
-      generatedCoverImages.push({
-        coverImageUrl,
-        postId,
-      });
+      await step.run(`Prepare assets for ${topic.title}`, async () =>
+        preparePostAssetsForReview(postId),
+      );
+      preparedPostIds.push(postId);
     }
 
     return {
@@ -243,8 +219,77 @@ export const dailyDraftBuffer = inngest.createFunction(
       draftReadyCount: before.draftReadyCount,
       draftingCount: before.draftingCount,
       draftReadyTarget,
-      generatedCoverImages,
+      preparedPostIds,
       selectedTopicCount: before.selectedTopicCount,
+    };
+  },
+);
+
+export const weekdayMorningApprovalPrep = inngest.createFunction(
+  {
+    id: "weekday-morning-approval-prep",
+    triggers: [{ cron: "TZ=America/New_York 0 6 * * 1-5" }],
+  },
+  async ({ step }) => {
+    const existingReadyPost = await step.run("Find existing approval candidate", async () =>
+      db.post.findFirst({
+        where: {
+          status: {
+            in: ["DRAFT_READY", "READY_TO_PUBLISH"],
+          },
+          sourcePlatform: null,
+        },
+        orderBy: [{ updatedAt: "asc" }],
+        select: {
+          id: true,
+          status: true,
+          title: true,
+        },
+      }),
+    );
+
+    if (existingReadyPost) {
+      return {
+        action: "existing_candidate",
+        postId: existingReadyPost.id,
+        status: existingReadyPost.status,
+        title: existingReadyPost.title,
+      };
+    }
+
+    const draftingPost = await step.run("Find draft that needs assets", async () =>
+      db.post.findFirst({
+        where: {
+          status: "DRAFTING",
+          sourcePlatform: null,
+        },
+        orderBy: [{ updatedAt: "asc" }],
+        select: {
+          id: true,
+          title: true,
+        },
+      }),
+    );
+
+    if (draftingPost) {
+      await step.run(`Prepare existing draft ${draftingPost.title}`, async () =>
+        preparePostAssetsForReview(draftingPost.id),
+      );
+
+      return {
+        action: "prepared_existing_draft",
+        postId: draftingPost.id,
+        title: draftingPost.title,
+      };
+    }
+
+    const preparedPostId = await step.run("Prepare next selected topic", async () =>
+      prepareNextSelectedTopicForReview(),
+    );
+
+    return {
+      action: preparedPostId ? "prepared_selected_topic" : "no_selected_topic",
+      postId: preparedPostId,
     };
   },
 );
@@ -252,7 +297,7 @@ export const dailyDraftBuffer = inngest.createFunction(
 export const morningPublishingSummary = inngest.createFunction(
   {
     id: "morning-publishing-summary",
-    triggers: [{ cron: "TZ=America/New_York 0 9 * * 1-5" }],
+    triggers: [{ cron: "TZ=America/New_York 45 6 * * 1-5" }],
   },
   async ({ step }) => {
     const summary = await step.run("Build morning publishing summary", async () => {
@@ -260,7 +305,9 @@ export const morningPublishingSummary = inngest.createFunction(
         await Promise.all([
           db.post.findMany({
             where: {
-              status: "READY_TO_PUBLISH",
+              status: {
+                in: ["DRAFT_READY", "READY_TO_PUBLISH"],
+              },
             },
             orderBy: [{ updatedAt: "asc" }],
             take: 3,
@@ -323,7 +370,7 @@ export const morningPublishingSummary = inngest.createFunction(
     const readyText =
       summary.readyPosts.length > 0
         ? summary.readyPosts.map(formatPostLine).join("\n")
-        : "- No posts marked READY_TO_PUBLISH.";
+        : "- No posts ready for approval.";
     const draftingText =
       summary.draftingPosts.length > 0
         ? summary.draftingPosts.map(formatPostLine).join("\n")
@@ -349,7 +396,7 @@ export const morningPublishingSummary = inngest.createFunction(
     const detail = [
       "Morning pipeline update",
       "",
-      "Ready to publish:",
+      "Ready for approval:",
       readyText,
       "",
       "Drafts needing review:",
@@ -545,6 +592,7 @@ export const nightlyStatsAndTopics = inngest.createFunction(
 export const functions = [
   dailyPlanning,
   dailyDraftBuffer,
+  weekdayMorningApprovalPrep,
   morningPublishingSummary,
   nightlyStatsAndTopics,
 ];

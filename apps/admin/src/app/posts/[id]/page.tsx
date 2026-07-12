@@ -6,6 +6,7 @@ import { CopyButton } from "../../components/CopyButton";
 import { SubmitButton } from "../../components/SubmitButton";
 import { PostForm } from "../PostForm";
 import {
+  approveAndPublishPost,
   createDevToDraftForPost,
   deletePipelinePost,
   generateCoverImageForPost,
@@ -43,6 +44,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
 
   const updateAction = updatePost.bind(null, post.id);
   const deleteAction = deletePipelinePost.bind(null, post.id);
+  const approveAndPublishAction = approveAndPublishPost.bind(null, post.id);
   const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
   const recreateDevToDraftAction = recreateDevToDraftForPost.bind(null, post.id);
   const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
@@ -91,6 +93,12 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       "PROMOTED_SOCIAL",
       "COMPLETE",
     ].includes(post.status);
+  const isFullyPublished =
+    post.status === "COMPLETE" ||
+    (isBlogPublished &&
+      devToPublication?.status === "PUBLISHED" &&
+      linkedInPublication?.status === "PUBLISHED" &&
+      blueskyPublication?.status === "PUBLISHED");
   const routeSteps = [
     {
       label: "Canonical",
@@ -138,6 +146,16 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       actions={
         <>
           <SecondaryLink href="/posts">All posts</SecondaryLink>
+          {!isProtectedImport && hasPromotionAssets && !isFullyPublished ? (
+            <form action={approveAndPublishAction}>
+              <SubmitButton
+                className="inline-flex h-10 items-center rounded-md bg-emerald-400 px-4 text-sm font-semibold text-black transition hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Publishing..."
+              >
+                Approve and publish
+              </SubmitButton>
+            </form>
+          ) : null}
           {!isProtectedImport ? (
             <form action={publishBlogAction}>
               <SubmitButton

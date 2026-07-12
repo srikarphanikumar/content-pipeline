@@ -993,6 +993,39 @@ async function firstSelectedTopicWithoutPost() {
   });
 }
 
+export async function preparePostAssetsForReview(postId: string) {
+  await ensureCoverImage(postId);
+  await ensureDevToDraft(postId);
+  await ensurePromotionAssets(postId);
+
+  await db.post.update({
+    where: {
+      id: postId,
+    },
+    data: {
+      status: "DRAFT_READY",
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+  revalidatePath("/topics");
+}
+
+export async function prepareNextSelectedTopicForReview() {
+  const topic = await firstSelectedTopicWithoutPost();
+
+  if (!topic) {
+    return null;
+  }
+
+  const postId = await createDraftPostRecordFromTopic(topic.id);
+  await preparePostAssetsForReview(postId);
+
+  return postId;
+}
+
 export async function prepareNextSelectedTopicDraft() {
   const topic = await firstSelectedTopicWithoutPost();
 
@@ -1001,25 +1034,12 @@ export async function prepareNextSelectedTopicDraft() {
   }
 
   try {
-    const postId = await createDraftPostRecordFromTopic(topic.id);
+    const postId = await prepareNextSelectedTopicForReview();
 
-    await ensureCoverImage(postId);
-    await ensureDevToDraft(postId);
-    await ensurePromotionAssets(postId);
+    if (!postId) {
+      redirect("/topics?prepared=0");
+    }
 
-    await db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: "DRAFT_READY",
-      },
-    });
-
-    revalidatePath("/");
-    revalidatePath("/posts");
-    revalidatePath(`/posts/${postId}`);
-    revalidatePath("/topics");
     redirect(`/posts/${postId}?prepared=1`);
   } catch (error) {
     console.error("Could not prepare next selected topic.", error);

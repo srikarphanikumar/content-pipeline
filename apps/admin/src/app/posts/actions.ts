@@ -60,6 +60,33 @@ function nullableDateValue(formData: FormData, key: string) {
   return value ? new Date(value) : null;
 }
 
+function tomorrowMorningNewYork() {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/New_York",
+    year: "numeric",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const year = Number(values.year);
+  const month = Number(values.month);
+  const day = Number(values.day);
+  const noonUtc = new Date(Date.UTC(year, month - 1, day + 1, 12, 0, 0));
+  const offsetName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(noonUtc)
+    .find((part) => part.type === "timeZoneName")?.value;
+  const match = offsetName?.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/);
+  const offsetHours = match ? Number(match[1]) : -4;
+  const offsetMinutes = match?.[2] ? Number(match[2]) : 0;
+  const offsetTotalMinutes = offsetHours * 60 + Math.sign(offsetHours) * offsetMinutes;
+
+  return new Date(Date.UTC(year, month - 1, day + 1, 9, 0, 0) - offsetTotalMinutes * 60 * 1000);
+}
+
 async function promotionAssetContent(postId: string, type: PromotionAssetType) {
   const asset = await db.promotionAsset.findUnique({
     where: {
@@ -363,6 +390,72 @@ export async function publishBlogCanonicalPost(postId: string) {
         externalId: post.slug,
         externalUrl: canonicalUrl,
         publishedAt,
+        errorMessage: null,
+      },
+    }),
+  ]);
+
+  revalidatePath("/");
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
+export async function schedulePostForTomorrow(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  if (post.sourcePlatform === "SUBSTACK") {
+    throw new Error("Imported Substack archive posts cannot be scheduled for republishing.");
+  }
+
+  if (!post.title.trim() || !post.slug.trim() || !post.bodyMarkdown.trim()) {
+    throw new Error("Title, slug, and body are required before scheduling.");
+  }
+
+  const scheduledAt = tomorrowMorningNewYork();
+  const canonicalUrl = post.canonicalUrl || canonicalPostUrl(post.slug);
+
+  await db.$transaction([
+    db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "READY_TO_PUBLISH",
+        canonicalUrl,
+        publishedAt: scheduledAt,
+      },
+    }),
+    db.platformPublication.upsert({
+      where: {
+        postId_platform: {
+          postId,
+          platform: "BLOG",
+        },
+      },
+      create: {
+        postId,
+        platform: "BLOG",
+        status: "SCHEDULED",
+        scheduledAt,
+        publishedAt: null,
+        externalId: post.slug,
+        externalUrl: canonicalUrl,
+        errorMessage: null,
+      },
+      update: {
+        status: "SCHEDULED",
+        scheduledAt,
+        publishedAt: null,
+        externalId: post.slug,
+        externalUrl: canonicalUrl,
         errorMessage: null,
       },
     }),

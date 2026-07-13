@@ -12,6 +12,7 @@ import {
   generateCoverImageForPost,
   generatePromotionAssetsForPost,
   publishBlogCanonicalPost,
+  schedulePostForTomorrow,
   publishSyndicationAndSocialsForPost,
   recreateDevToDraftForPost,
   updatePost,
@@ -49,6 +50,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const recreateDevToDraftAction = recreateDevToDraftForPost.bind(null, post.id);
   const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
   const publishBlogAction = publishBlogCanonicalPost.bind(null, post.id);
+  const scheduleTomorrowAction = schedulePostForTomorrow.bind(null, post.id);
   const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
   const publishSocialsAction = publishSyndicationAndSocialsForPost.bind(null, post.id);
   const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
@@ -99,6 +101,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       devToPublication?.status === "PUBLISHED" &&
       linkedInPublication?.status === "PUBLISHED" &&
       blueskyPublication?.status === "PUBLISHED");
+  const isBlogScheduled = blogPublication?.status === "SCHEDULED";
   const routeSteps = [
     {
       label: "Canonical",
@@ -157,6 +160,16 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
             </form>
           ) : null}
           {!isProtectedImport ? (
+            <form action={scheduleTomorrowAction}>
+              <SubmitButton
+                className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white transition hover:border-orange-400 hover:text-orange-300 disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Scheduling..."
+              >
+                Schedule for tomorrow
+              </SubmitButton>
+            </form>
+          ) : null}
+          {!isProtectedImport ? (
             <form action={publishBlogAction}>
               <SubmitButton
                 className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
@@ -195,6 +208,15 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       title={post.title}
     >
       <section className="mb-6 rounded-lg border border-white/10 bg-[#141414] p-5">
+        {isBlogScheduled ? (
+          <div className="mb-5 rounded-md border border-orange-400/30 bg-orange-500/10 p-3 text-sm text-orange-100">
+            Scheduled for {blogPublication.scheduledAt?.toLocaleString("en-US", {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: "America/New_York",
+            })} America/New_York.
+          </div>
+        ) : null}
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">

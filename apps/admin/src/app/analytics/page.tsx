@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { db, formatDate } from "@content-pipeline/db";
 import type { Platform } from "@content-pipeline/db";
+import { SubmitButton } from "../components/SubmitButton";
 import { AdminShell } from "../components/AdminShell";
+import { collectAnalyticsNow, triggerInngestFunction } from "./actions";
 import { engagementScore } from "@/lib/analytics";
 import { hasLinkedInAnalyticsScope } from "@/lib/linkedin";
 
@@ -17,6 +19,12 @@ const trackedPlatforms: Platform[] = [
 ];
 
 const thirtyDaysAgo = () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+type AnalyticsPageProps = {
+  searchParams: Promise<{
+    manual?: string;
+  }>;
+};
 
 function latestMetrics(
   snapshots: Array<{
@@ -53,7 +61,8 @@ function metricSummary(metrics: ReturnType<typeof latestMetrics>) {
   return metrics.map((metric) => `${metric.value} ${metric.name}`).join(", ");
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
+  const { manual } = await searchParams;
   const since = thirtyDaysAgo();
   const [
     totalPublishedPosts,
@@ -215,6 +224,86 @@ export default async function AnalyticsPage() {
       eyebrow="Measurement"
       title="Analytics"
     >
+      {manual ? (
+        <div className="mb-6 rounded-lg border border-orange-400/30 bg-orange-500/10 p-4 text-sm text-orange-200">
+          {manual}
+        </div>
+      ) : null}
+
+      <section className="mb-6 rounded-lg border border-white/10 bg-[#141414] p-5">
+        <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+              Manual runs
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Trigger pipeline jobs</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
+              Nightly stats runs at 9:00 PM America/New_York on weekdays. Use these controls
+              to collect analytics immediately or enqueue an Inngest workflow on demand.
+            </p>
+          </div>
+          <form action={collectAnalyticsNow}>
+            <SubmitButton pendingLabel="Collecting analytics...">
+              Collect analytics now
+            </SubmitButton>
+          </form>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {[
+            {
+              action: triggerInngestFunction.bind(null, "daily-planning"),
+              label: "Daily planning",
+              pending: "Triggering planning...",
+              time: "5:30 AM weekdays",
+            },
+            {
+              action: triggerInngestFunction.bind(null, "draft-buffer"),
+              label: "Draft buffer",
+              pending: "Triggering buffer...",
+              time: "5:45 AM weekdays",
+            },
+            {
+              action: triggerInngestFunction.bind(null, "approval-prep"),
+              label: "Approval prep",
+              pending: "Triggering prep...",
+              time: "6:00 AM weekdays",
+            },
+            {
+              action: triggerInngestFunction.bind(null, "morning-summary"),
+              label: "Morning summary",
+              pending: "Triggering summary...",
+              time: "6:45 AM weekdays",
+            },
+            {
+              action: triggerInngestFunction.bind(null, "nightly-stats"),
+              label: "Nightly stats",
+              pending: "Triggering stats...",
+              time: "9:00 PM weekdays",
+            },
+          ].map((item) => (
+            <form
+              action={item.action}
+              className="rounded-lg border border-white/10 bg-black/20 p-4"
+              key={item.label}
+            >
+              <p className="font-semibold text-white">{item.label}</p>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                {item.time}
+              </p>
+              <div className="mt-4">
+                <SubmitButton
+                  className="h-9 rounded-md border border-white/15 px-3 text-sm font-semibold text-white transition hover:border-orange-400 hover:text-orange-300 disabled:cursor-wait disabled:opacity-70"
+                  pendingLabel={item.pending}
+                >
+                  Trigger
+                </SubmitButton>
+              </div>
+            </form>
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
           <section

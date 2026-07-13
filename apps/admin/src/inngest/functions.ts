@@ -58,7 +58,10 @@ async function recordWhatsAppDelivery(input: {
 export const dailyPlanning = inngest.createFunction(
   {
     id: "daily-content-planning",
-    triggers: [{ cron: "TZ=America/New_York 30 5 * * 1-5" }],
+    triggers: [
+      { cron: "TZ=America/New_York 30 5 * * 1-5" },
+      { event: "admin/daily-planning.requested" },
+    ],
   },
   async ({ step }) => {
     const before = await step.run("Count current pipeline state", async () => {
@@ -127,7 +130,10 @@ export const dailyPlanning = inngest.createFunction(
 export const dailyDraftBuffer = inngest.createFunction(
   {
     id: "daily-draft-buffer",
-    triggers: [{ cron: "TZ=America/New_York 45 5 * * 1-5" }],
+    triggers: [
+      { cron: "TZ=America/New_York 45 5 * * 1-5" },
+      { event: "admin/draft-buffer.requested" },
+    ],
   },
   async ({ step }) => {
     const before = await step.run("Count draft buffer", async () => {
@@ -230,7 +236,10 @@ export const dailyDraftBuffer = inngest.createFunction(
 export const weekdayMorningApprovalPrep = inngest.createFunction(
   {
     id: "weekday-morning-approval-prep",
-    triggers: [{ cron: "TZ=America/New_York 0 6 * * 1-5" }],
+    triggers: [
+      { cron: "TZ=America/New_York 0 6 * * 1-5" },
+      { event: "admin/approval-prep.requested" },
+    ],
   },
   async ({ step }) => {
     const existingReadyPost = await step.run("Find existing approval candidate", async () =>
@@ -299,7 +308,10 @@ export const weekdayMorningApprovalPrep = inngest.createFunction(
 export const morningPublishingSummary = inngest.createFunction(
   {
     id: "morning-publishing-summary",
-    triggers: [{ cron: "TZ=America/New_York 45 6 * * 1-5" }],
+    triggers: [
+      { cron: "TZ=America/New_York 45 6 * * 1-5" },
+      { event: "admin/morning-summary.requested" },
+    ],
   },
   async ({ step }) => {
     const summary = await step.run("Build morning publishing summary", async () => {
@@ -456,7 +468,10 @@ export const morningPublishingSummary = inngest.createFunction(
 export const nightlyStatsAndTopics = inngest.createFunction(
   {
     id: "nightly-stats-and-topic-prep",
-    triggers: [{ cron: "TZ=America/New_York 0 21 * * 1-5" }],
+    triggers: [
+      { cron: "TZ=America/New_York 0 21 * * 1-5" },
+      { event: "admin/nightly-stats.requested" },
+    ],
   },
   async ({ step }) => {
     await step.run("Collect platform metric snapshots", async () =>

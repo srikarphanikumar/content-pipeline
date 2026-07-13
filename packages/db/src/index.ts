@@ -40,6 +40,7 @@ export {
 } from "./markdown";
 export type {
   Platform,
+  PlatformMetricSnapshot,
   PlatformPublishStatus,
   Post,
   PostStatus,

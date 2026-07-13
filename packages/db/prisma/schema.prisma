@@ -131,7 +131,25 @@ model PlatformPublication {
   postId String
   post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  metricSnapshots PlatformMetricSnapshot[]
+
   @@unique([postId, platform])
+}
+
+model PlatformMetricSnapshot {
+  id          String   @id @default(cuid())
+  platform    Platform
+  metricName  String
+  metricValue Int
+  capturedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  publicationId String
+  publication   PlatformPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([platform, capturedAt])
+  @@index([publicationId, capturedAt])
+  @@index([metricName, capturedAt])
 }
 
 model PlatformConnection {

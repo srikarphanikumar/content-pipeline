@@ -7,6 +7,7 @@ const navItems = [
   { href: "/", label: "Pipeline" },
   { href: "/topics", label: "Ideas" },
   { href: "/posts", label: "Posts" },
+  { href: "/analytics", label: "Analytics" },
   { href: "/import/substack", label: "Import" },
   { href: "/subscribers", label: "Readers" },
   { href: "/settings", label: "Integrations" },

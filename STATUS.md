@@ -435,7 +435,7 @@ Needed:
 
 ### WhatsApp Notifications
 
-Twilio WhatsApp production setup is in progress.
+Twilio WhatsApp production setup is operational for test sends.
 
 Implemented:
 
@@ -453,9 +453,11 @@ Implemented:
   - morning summary: 6:45 AM
   - nightly stats/topic prep: 9:00 PM
 
-Current blocker:
+Next checks:
 
-- WhatsApp business-initiated template approval still needs to become fully green in Twilio/Meta. Inngest can show a successful run even when no WhatsApp arrives if the template/sender approval is still pending or rejected.
+- Confirm the weekday morning and nightly Inngest template sends arrive end to end.
+- Use the delivery log in Settings to watch Twilio status, error codes, and message SIDs.
+- Keep nightly summaries tied to stored analytics snapshots instead of one-off live fetches.
 
 ### dev.to Draft Publishing
 

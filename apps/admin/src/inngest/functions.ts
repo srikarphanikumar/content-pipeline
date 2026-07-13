@@ -5,7 +5,7 @@ import {
   prepareNextSelectedTopicForReview,
   preparePostAssetsForReview,
 } from "@/app/topics/actions";
-import { fetchBlueskyStats, fetchDevToStats } from "@/lib/platform-stats";
+import { collectPlatformMetricSnapshots, latestPlatformStatsLines } from "@/lib/analytics";
 import { pollTwilioMessageStatus, sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { inngest } from "./client";
 
@@ -459,50 +459,13 @@ export const nightlyStatsAndTopics = inngest.createFunction(
     triggers: [{ cron: "TZ=America/New_York 0 21 * * 1-5" }],
   },
   async ({ step }) => {
-    const posts = await step.run("Find published/promoted posts for stats", async () =>
-      db.post.findMany({
-        where: {
-          publications: {
-            some: {
-              status: "PUBLISHED",
-            },
-          },
-        },
-        include: {
-          publications: true,
-        },
-        orderBy: [{ updatedAt: "desc" }],
-        take: 5,
-      }),
+    await step.run("Collect platform metric snapshots", async () =>
+      collectPlatformMetricSnapshots(),
     );
 
-    const statsLines = await step.run("Collect platform stats", async () => {
-      const lines: string[] = [];
-
-      for (const post of posts) {
-        lines.push(`- ${post.title}`);
-
-        for (const publication of post.publications) {
-          if (publication.platform === "DEVTO" && publication.externalId) {
-            const stats = await fetchDevToStats(publication.externalId);
-            lines.push(
-              `  dev.to: ${stats ? `${stats.views ?? "-"} views, ${stats.reactions ?? "-"} reactions, ${stats.comments ?? "-"} comments` : "stats unavailable"}`,
-            );
-          } else if (publication.platform === "BLUESKY" && publication.externalId) {
-            const stats = await fetchBlueskyStats(publication.externalId);
-            lines.push(
-              `  Bluesky: ${stats ? `${stats.likes ?? "-"} likes, ${stats.reposts ?? "-"} reposts, ${stats.replies ?? "-"} replies, ${stats.quotes ?? "-"} quotes` : "stats unavailable"}`,
-            );
-          } else if (publication.platform === "LINKEDIN") {
-            lines.push(
-              `  LinkedIn: ${publication.status}${publication.externalUrl ? ` · ${publication.externalUrl}` : ""} (impressions need LinkedIn analytics permission)`,
-            );
-          }
-        }
-      }
-
-      return lines.length > 0 ? lines : ["- No published platform posts found yet."];
-    });
+    const statsLines = await step.run("Read latest platform stats", async () =>
+      latestPlatformStatsLines({ take: 8 }),
+    );
 
     const topicState = await step.run("Prepare next-day topic state", async () => {
       const [activeTopicCount, selectedTopics] = await Promise.all([

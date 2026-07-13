@@ -1,6 +1,17 @@
 import crypto from "node:crypto";
 
-export const linkedInScopes = ["openid", "profile", "email", "w_member_social"];
+const linkedInAnalyticsScopes = (process.env.LINKEDIN_ANALYTICS_SCOPES || "")
+  .split(/[\s,]+/)
+  .map((scope) => scope.trim())
+  .filter(Boolean);
+
+export const linkedInScopes = [
+  "openid",
+  "profile",
+  "email",
+  "w_member_social",
+  ...linkedInAnalyticsScopes,
+];
 
 type LinkedInTokenResponse = {
   access_token: string;
@@ -16,6 +27,20 @@ export type LinkedInUserInfo = {
   sub?: string;
   name?: string;
   email?: string;
+};
+
+type LinkedInSocialMetadataResponse = {
+  commentSummary?: {
+    count?: number;
+    topLevelCount?: number;
+  };
+  reactionSummaries?: Record<
+    string,
+    {
+      count?: number;
+      reactionType?: string;
+    }
+  >;
 };
 
 const linkedInVersion = process.env.LINKEDIN_API_VERSION || "202606";
@@ -84,6 +109,17 @@ export async function fetchLinkedInUserInfo(accessToken: string) {
 
 function linkedInPostUrl(postUrn: string) {
   return `https://www.linkedin.com/feed/update/${encodeURIComponent(postUrn)}/`;
+}
+
+export function hasLinkedInAnalyticsScope(scope: string | null | undefined) {
+  const scopes = new Set((scope || "").split(/[\s,]+/).filter(Boolean));
+
+  return (
+    scopes.has("r_member_social_feed") ||
+    scopes.has("r_organization_social_feed") ||
+    scopes.has("r_member_social") ||
+    scopes.has("r_organization_social")
+  );
 }
 
 async function uploadLinkedInImage({
@@ -230,5 +266,45 @@ export async function publishLinkedInPost({
   return {
     externalId: postUrn,
     externalUrl: linkedInPostUrl(postUrn),
+  };
+}
+
+export async function fetchLinkedInSocialMetadata({
+  accessToken,
+  postUrn,
+}: {
+  accessToken: string;
+  postUrn: string;
+}) {
+  const response = await fetch(
+    `https://api.linkedin.com/rest/socialMetadata/${encodeURIComponent(postUrn)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Linkedin-Version": linkedInVersion,
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`LinkedIn social metadata failed: ${response.status} ${await response.text()}`);
+  }
+
+  const metadata = (await response.json()) as LinkedInSocialMetadataResponse;
+  const reactionEntries = Object.entries(metadata.reactionSummaries || {});
+  const reactions = reactionEntries.reduce(
+    (total, [, summary]) => total + (summary.count || 0),
+    0,
+  );
+
+  return {
+    comments: metadata.commentSummary?.count,
+    reactions,
+    topLevelComments: metadata.commentSummary?.topLevelCount,
+    reactionBreakdown: reactionEntries.map(([key, summary]) => ({
+      name: `reaction${(summary.reactionType || key).toLowerCase().replace(/(^|_)([a-z])/g, (_, __, letter: string) => letter.toUpperCase())}`,
+      value: summary.count,
+    })),
   };
 }

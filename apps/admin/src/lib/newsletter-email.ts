@@ -152,11 +152,18 @@ export function buildNewsletterEmail(
   const unsubscribe = unsubscribeUrl(recipient);
   const html = `<!doctype html>
 <html>
-  <body style="margin:0;background:#080808;color:#f7f2ea;font-family:Arial,Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;color:#080808;">${escapeHtml(preview)}</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#080808;">
+  <body style="margin:0;background:#101010;color:#f7f2ea;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;color:#101010;">${escapeHtml(preview)}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#101010;">
       <tr>
-        <td align="center" style="padding:28px 14px;">
+        <td align="center" style="padding:18px 14px 28px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;">
+            <tr>
+              <td style="padding:0 0 10px;text-align:right;font-size:12px;">
+                <a href="${canonicalUrl}" style="color:#fb923c;text-decoration:underline;">View in browser</a>
+              </td>
+            </tr>
+          </table>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#111111;border:1px solid #262626;border-radius:12px;overflow:hidden;">
             <tr>
               <td style="padding:28px 28px 18px;border-bottom:1px solid #262626;">

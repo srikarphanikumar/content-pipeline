@@ -44,6 +44,7 @@ type SubscribersPageProps = {
 const emailMessages: Record<string, string> = {
   "already-sent": "The latest post was already sent to active subscribers.",
   "no-active-subscribers": "No active subscribers were available for a newsletter send.",
+  "no-published-post": "No published owned post is available for a subscriber send yet.",
   partial: "Newsletter send completed with some failures. Check the delivery log.",
   "sent-post": "Latest post sent to active subscribers.",
   "sent-test": "Test newsletter email sent to the admin address.",

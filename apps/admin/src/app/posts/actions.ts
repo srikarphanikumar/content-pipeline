@@ -8,6 +8,7 @@ import { publishBlueskyPost } from "@/lib/bluesky";
 import { generateAndStoreCoverImage } from "@/lib/cover-image";
 import { createDevToDraft, publishDevToArticle } from "@/lib/devto";
 import { publishLinkedInPost } from "@/lib/linkedin";
+import { sendPostToActiveSubscribers } from "@/lib/newsletter-send";
 import { generatePromotionCopy } from "@/lib/promotion";
 
 const statuses: PostStatus[] = [
@@ -394,6 +395,14 @@ export async function publishBlogCanonicalPost(postId: string) {
       },
     }),
   ]);
+
+  if (nextStatus === "PUBLISHED_BLOG" && post.sourcePlatform === null) {
+    try {
+      await sendPostToActiveSubscribers(postId);
+    } catch (error) {
+      console.error("Published blog post, but newsletter send failed.", error);
+    }
+  }
 
   revalidatePath("/");
   revalidatePath("/posts");

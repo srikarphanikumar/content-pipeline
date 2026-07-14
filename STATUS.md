@@ -432,8 +432,15 @@ Resend is wired for subscription confirmation.
 
 Needed:
 
-- Weekly digest email generation.
-- Manual send flow from admin.
+- Substack subscriber CSV import.
+- Resend webhook ingestion for delivery/open/click/bounce analytics.
+
+Implemented:
+
+- Admin test newsletter email.
+- Manual latest-post send to active subscribers.
+- Automatic subscriber email after a successful first-time owned blog publish.
+- Email delivery logging and duplicate-send protection.
 
 ### WhatsApp Notifications
 

@@ -12,6 +12,9 @@ import {
   generateCoverImageForPost,
   generatePromotionAssetsForPost,
   publishBlogCanonicalPost,
+  publishBlueskyPromotionForPost,
+  publishDevToSyndicationForPost,
+  publishLinkedInPromotionForPost,
   schedulePostForTomorrow,
   publishSyndicationAndSocialsForPost,
   recreateDevToDraftForPost,
@@ -53,6 +56,9 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const scheduleTomorrowAction = schedulePostForTomorrow.bind(null, post.id);
   const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
   const publishSocialsAction = publishSyndicationAndSocialsForPost.bind(null, post.id);
+  const publishDevToAction = publishDevToSyndicationForPost.bind(null, post.id);
+  const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
+  const publishBlueskyAction = publishBlueskyPromotionForPost.bind(null, post.id);
   const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
   const publicUrl = `https://blog.mspk.me/posts/${post.slug}`;
   const blogPublication = post.publications.find(
@@ -77,6 +83,9 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const linkedInPost = promotionAssets.get("LINKEDIN_POST") || "";
   const linkedInFirstComment = promotionAssets.get("LINKEDIN_FIRST_COMMENT") || "";
   const blueskyPost = promotionAssets.get("BLUESKY_POST") || "";
+  const linkedInPostLimit = 3000;
+  const linkedInFirstCommentLimit = 1250;
+  const blueskyPostLimit = 300;
   const hasPromotionAssets = post.promotionAssets.length > 0;
   const isProtectedImport = post.sourcePlatform === "SUBSTACK";
   const isPipelineQueuePost = [
@@ -420,16 +429,40 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                       Recreate dev.to draft
                     </SubmitButton>
                   </form>
+                  {isBlogPublished ? (
+                    <form action={publishDevToAction}>
+                      <SubmitButton
+                        className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                        pendingLabel="Publishing..."
+                      >
+                        {devToPublication.status === "PUBLISHED"
+                          ? "Publish again to dev.to"
+                          : "Publish dev.to"}
+                      </SubmitButton>
+                    </form>
+                  ) : null}
                 </>
               ) : (
-                <form action={createDevToDraftAction}>
-                  <SubmitButton
-                    className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                    pendingLabel="Creating draft..."
-                  >
-                    Create dev.to draft
-                  </SubmitButton>
-                </form>
+                <>
+                  <form action={createDevToDraftAction}>
+                    <SubmitButton
+                      className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
+                      pendingLabel="Creating draft..."
+                    >
+                      Create dev.to draft
+                    </SubmitButton>
+                  </form>
+                  {isBlogPublished ? (
+                    <form action={publishDevToAction}>
+                      <SubmitButton
+                        className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                        pendingLabel="Publishing..."
+                      >
+                        Publish dev.to
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                </>
               )}
             </div>
           </section>
@@ -470,6 +503,10 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                         ? `Published ${linkedInPublication.publishedAt.toLocaleString()}`
                         : "Posts the saved LinkedIn copy."}
                     </p>
+                    <p className="mt-1 text-xs text-zinc-600">
+                      Main post: {linkedInPost.length}/{linkedInPostLimit}. First comment is saved
+                      for manual follow-up.
+                    </p>
                   </div>
                   <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
                     {linkedInPublication?.status || "NOT_STARTED"}
@@ -491,6 +528,16 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                       Open LinkedIn post
                     </a>
                   ) : null}
+                  <form action={publishLinkedInAction}>
+                    <SubmitButton
+                      className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                      pendingLabel="Posting..."
+                    >
+                      {linkedInPublication?.status === "PUBLISHED"
+                        ? "Post again to LinkedIn"
+                        : "Post to LinkedIn"}
+                    </SubmitButton>
+                  </form>
                 </div>
               </div>
 
@@ -524,31 +571,59 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
                       Open Bluesky post
                     </a>
                   ) : null}
+                  <form action={publishBlueskyAction}>
+                    <SubmitButton
+                      className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                      pendingLabel="Posting..."
+                    >
+                      {blueskyPublication?.status === "PUBLISHED"
+                        ? "Post again to Bluesky"
+                        : "Post to Bluesky"}
+                    </SubmitButton>
+                  </form>
                 </div>
               </div>
 
               <form action={updatePromotionAction} className="grid gap-5">
                 {[
-                  ["linkedInPost", "LinkedIn post", linkedInPost, "min-h-72"],
-                  [
-                    "linkedInFirstComment",
-                    "LinkedIn first comment",
-                    linkedInFirstComment,
-                    "min-h-28",
-                  ],
-                  ["blueskyPost", "Bluesky post", blueskyPost, "min-h-28"],
-                ].map(([name, label, value, height]) => (
+                  {
+                    height: "min-h-72",
+                    label: "LinkedIn post",
+                    limit: linkedInPostLimit,
+                    name: "linkedInPost",
+                    value: linkedInPost,
+                  },
+                  {
+                    height: "min-h-28",
+                    label: "LinkedIn first comment",
+                    limit: linkedInFirstCommentLimit,
+                    name: "linkedInFirstComment",
+                    value: linkedInFirstComment,
+                  },
+                  {
+                    height: "min-h-28",
+                    label: "Bluesky post",
+                    limit: blueskyPostLimit,
+                    name: "blueskyPost",
+                    value: blueskyPost,
+                  },
+                ].map(({ height, label, limit, name, value }) => (
                   <label
                     className="grid gap-2 text-sm font-semibold text-zinc-300"
                     key={name}
                   >
                     <span className="flex items-center justify-between gap-3">
-                      {label}
+                      <span>
+                        {label}
+                        <span className="ml-2 text-xs font-medium text-zinc-500">
+                          {value.length}/{limit}
+                        </span>
+                      </span>
                       <CopyButton value={value} />
                     </span>
                     <textarea
                       className={`${height} rounded-md border border-white/10 bg-black px-3 py-3 text-sm leading-6 text-white outline-none ring-orange-500/20 focus:ring-4`}
-                      maxLength={name === "blueskyPost" ? 300 : undefined}
+                      maxLength={limit}
                       name={name}
                       defaultValue={value}
                     />

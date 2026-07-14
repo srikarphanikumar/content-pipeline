@@ -24,11 +24,55 @@ function formatPostLine(post: {
   return `- ${post.title}\n  ${adminPostUrl(post.id)}`;
 }
 
+function truncateLine(value: string, maxLength = 120) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+}
+
 function notificationDate() {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "long",
     timeZone: "America/New_York",
   }).format(new Date());
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatStatusCounts(counts: {
+  failed: number;
+  generated?: number;
+  published: number;
+  scheduled: number;
+}) {
+  const parts = [
+    counts.published > 0 ? pluralize(counts.published, "published") : null,
+    counts.scheduled > 0 ? pluralize(counts.scheduled, "scheduled") : null,
+    counts.generated ? pluralize(counts.generated, "generated") : null,
+    counts.failed > 0 ? `${pluralize(counts.failed, "failure")} to review` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : "No activity yet";
+}
+
+function assertDelivered(status: {
+  errorCode: string | null;
+  errorMessage: string | null;
+  status: string;
+}) {
+  if (["failed", "undelivered"].includes(status.status)) {
+    throw new Error(
+      `WhatsApp delivery ${status.status}${
+        status.errorCode ? ` (${status.errorCode})` : ""
+      }: ${status.errorMessage || "No Twilio error message"}`,
+    );
+  }
 }
 
 async function recordWhatsAppDelivery(input: {
@@ -407,7 +451,7 @@ export const morningPublishingSummary = inngest.createFunction(
             )
             .join("\n")
         : "- No failed platform actions.";
-    const detail = [
+    const fullDetail = [
       "Morning pipeline update",
       "",
       "Ready for approval:",
@@ -422,21 +466,42 @@ export const morningPublishingSummary = inngest.createFunction(
       "Failures:",
       failuresText,
     ].join("\n");
-    const body = `Under The Hood morning summary for ${notificationDate()}:\n\n${detail}\n\nReply STOP to opt out.`;
+    const approvalSummary = summary.readyPosts[0]
+      ? `${truncateLine(summary.readyPosts[0].title, 120)} - ${adminPostUrl(summary.readyPosts[0].id)}`
+      : "None waiting. Clear runway.";
+    const draftBufferSummary = `${pluralize(
+      summary.readyPosts.length,
+      "ready draft",
+    )}, ${pluralize(summary.draftingPosts.length, "draft")} in progress`;
+    const failureSummary =
+      summary.failedPublications.length > 0
+        ? `${pluralize(summary.failedPublications.length, "failure")} needs review`
+        : "None. Pipeline is clean.";
+    const body = [
+      `Pipeline status for ${notificationDate()}.`,
+      "",
+      `Post awaiting approval: ${approvalSummary}`,
+      `Draft buffer: ${draftBufferSummary}`,
+      `Failed jobs: ${failureSummary}`,
+      "",
+      "Reply STOP to opt out.",
+    ].join("\n");
 
     return step.run("Send WhatsApp morning summary", async () => {
       const result = await sendWhatsAppTemplate(
         process.env.TWILIO_MORNING_TEMPLATE_SID,
         {
           "1": notificationDate(),
-          "2": detail,
+          "2": approvalSummary,
+          "3": draftBufferSummary,
+          "4": failureSummary,
         },
         body,
       );
 
       if (!result.sent) {
         await recordWhatsAppDelivery({
-          bodyPreview: body,
+          bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
           errorMessage: result.reason,
           kind: "MORNING_SUMMARY",
           status: "not_sent",
@@ -448,7 +513,7 @@ export const morningPublishingSummary = inngest.createFunction(
       const status = await pollTwilioMessageStatus(result.sid);
 
       await recordWhatsAppDelivery({
-        bodyPreview: body,
+        bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
         errorCode: status.errorCode,
         errorMessage: status.errorMessage,
         kind: "MORNING_SUMMARY",
@@ -456,6 +521,7 @@ export const morningPublishingSummary = inngest.createFunction(
         status: status.status,
         templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
       });
+      assertDelivered(status);
 
       return {
         ...result,
@@ -474,12 +540,32 @@ export const nightlyStatsAndTopics = inngest.createFunction(
     ],
   },
   async ({ step }) => {
-    await step.run("Collect platform metric snapshots", async () =>
+    const collectionResult = await step.run("Collect platform metric snapshots", async () =>
       collectPlatformMetricSnapshots(),
     );
 
     const statsLines = await step.run("Read latest platform stats", async () =>
       latestPlatformStatsLines({ take: 8 }),
+    );
+
+    const platformState = await step.run("Read platform delivery state", async () =>
+      db.platformPublication.findMany({
+        where: {
+          platform: {
+            in: ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"],
+          },
+        },
+        include: {
+          post: {
+            select: {
+              title: true,
+            },
+          },
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+      }),
     );
 
     const topicState = await step.run("Prepare next-day topic state", async () => {
@@ -526,11 +612,31 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       };
     });
 
+    const summaryForPlatform = (platform: "BLOG" | "DEVTO" | "LINKEDIN" | "BLUESKY") => {
+      const publications = platformState.filter((publication) => publication.platform === platform);
+
+      return formatStatusCounts({
+        failed: publications.filter((publication) => publication.status === "FAILED").length,
+        generated: publications.filter((publication) => publication.status === "GENERATED").length,
+        published: publications.filter((publication) => publication.status === "PUBLISHED").length,
+        scheduled: publications.filter((publication) => publication.status === "SCHEDULED").length,
+      });
+    };
+    const failedPublications = platformState.filter(
+      (publication) => publication.status === "FAILED",
+    );
+    const nightlyFailureSummary =
+      failedPublications.length > 0
+        ? `${pluralize(failedPublications.length, "failure")} needs review: ${truncateLine(
+            `${failedPublications[0].platform} - ${failedPublications[0].post.title}`,
+            120,
+          )}`
+        : `None. ${pluralize(collectionResult.metricsStored, "metric")} stored tonight.`;
     const selectedTopicText =
       topicState.selectedTopics.length > 0
         ? topicState.selectedTopics.map((topic) => `- ${topic.title}`).join("\n")
         : "- No selected topics ready for drafting.";
-    const detail = [
+    const fullDetail = [
       "Nightly platform stats",
       "",
       statsLines.join("\n"),
@@ -539,22 +645,37 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       selectedTopicText,
       "",
       `Active topic backlog: ${topicState.activeTopicCount}/${activeTopicTarget}`,
+      `Metrics stored: ${collectionResult.metricsStored}`,
     ].join("\n");
-    const body = `Under The Hood nightly stats for ${notificationDate()}:\n\n${detail}\n\nReply STOP to opt out.`;
+    const body = [
+      `Pipeline platform report for ${notificationDate()}.`,
+      "",
+      `Blog: ${summaryForPlatform("BLOG")}`,
+      `dev.to: ${summaryForPlatform("DEVTO")}`,
+      `LinkedIn: ${summaryForPlatform("LINKEDIN")}`,
+      `Bluesky: ${summaryForPlatform("BLUESKY")}`,
+      `Failed jobs: ${nightlyFailureSummary}`,
+      "",
+      "Reply STOP to opt out.",
+    ].join("\n");
 
     return step.run("Send WhatsApp nightly stats", async () => {
       const result = await sendWhatsAppTemplate(
         process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
         {
           "1": notificationDate(),
-          "2": detail,
+          "2": summaryForPlatform("BLOG"),
+          "3": summaryForPlatform("DEVTO"),
+          "4": summaryForPlatform("LINKEDIN"),
+          "5": summaryForPlatform("BLUESKY"),
+          "6": nightlyFailureSummary,
         },
         body,
       );
 
       if (!result.sent) {
         await recordWhatsAppDelivery({
-          bodyPreview: body,
+          bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
           errorMessage: result.reason,
           kind: "NIGHTLY_STATS",
           status: "not_sent",
@@ -566,7 +687,7 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       const status = await pollTwilioMessageStatus(result.sid);
 
       await recordWhatsAppDelivery({
-        bodyPreview: body,
+        bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
         errorCode: status.errorCode,
         errorMessage: status.errorMessage,
         kind: "NIGHTLY_STATS",
@@ -574,6 +695,7 @@ export const nightlyStatsAndTopics = inngest.createFunction(
         status: status.status,
         templateSid: process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
       });
+      assertDelivered(status);
 
       return {
         ...result,

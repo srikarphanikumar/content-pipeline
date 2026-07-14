@@ -121,6 +121,9 @@ async function startPlatformPublication(postId: string, platform: Platform) {
     },
     update: {
       status: "GENERATED",
+      externalId: null,
+      externalUrl: null,
+      publishedAt: null,
       errorMessage: null,
     },
   });
@@ -574,7 +577,7 @@ export async function recreateDevToDraftForPost(postId: string) {
   await createDevToDraftForPost(postId);
 }
 
-async function publishDevToSyndicationForPost(postId: string) {
+export async function publishDevToSyndicationForPost(postId: string) {
   const [post, existingPublication] = await Promise.all([
     db.post.findUnique({
       where: {
@@ -595,12 +598,6 @@ async function publishDevToSyndicationForPost(postId: string) {
     throw new Error("Post not found.");
   }
 
-  if (existingPublication?.status === "PUBLISHED") {
-    return {
-      skipped: true,
-    };
-  }
-
   const publication = await startPlatformPublication(postId, "DEVTO");
 
   try {
@@ -619,10 +616,6 @@ async function publishDevToSyndicationForPost(postId: string) {
         status: "PUBLISHED_DEVTO",
       },
     });
-
-    return {
-      skipped: false,
-    };
   } catch (error) {
     await markPlatformPublicationFailed(publication.id, error);
     throw error;

@@ -45,6 +45,22 @@ function normalizeWhatsAppNumber(value: string) {
   return value.startsWith("whatsapp:") ? value : `whatsapp:${value}`;
 }
 
+function safeTemplateVariable(value: string) {
+  return value
+    .replace(/\r?\n+/g, " | ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .slice(0, 900)
+    .trim();
+}
+
+function safeTemplateVariables(variables: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(variables).map(([key, value]) => [key, safeTemplateVariable(value)]),
+  );
+}
+
 export async function sendWhatsAppMessage(body: string): Promise<WhatsAppResult> {
   if (!twilioConfigured()) {
     return {
@@ -114,7 +130,7 @@ export async function sendWhatsAppTemplate(
       },
       body: new URLSearchParams({
         ContentSid: contentSid,
-        ContentVariables: JSON.stringify(variables),
+        ContentVariables: JSON.stringify(safeTemplateVariables(variables)),
         MessagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID as string,
         To: normalizeWhatsAppNumber(process.env.WHATSAPP_TO as string),
       }),

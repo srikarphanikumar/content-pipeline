@@ -23,6 +23,12 @@ const terminalStatuses = new Set([
   "read",
 ]);
 
+const twilioErrorMessages: Record<string, string> = {
+  "21656": "Invalid Twilio ContentVariables. Template variables must match the approved content template format.",
+  "63016": "WhatsApp message could not be delivered. Check template approval, sender status, and recipient/session rules.",
+  "63049": "WhatsApp delivery failed at Meta/Twilio. Check WhatsApp sender, template, and recipient eligibility.",
+};
+
 function twilioConfigured() {
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID &&
@@ -189,7 +195,10 @@ export async function fetchTwilioMessageStatus(
 
   return {
     errorCode: result.error_code ? String(result.error_code) : null,
-    errorMessage: result.error_message || null,
+    errorMessage:
+      result.error_message ||
+      (result.error_code ? twilioErrorMessages[String(result.error_code)] : null) ||
+      null,
     sid: result.sid || messageSid,
     status: result.status || "unknown",
   };

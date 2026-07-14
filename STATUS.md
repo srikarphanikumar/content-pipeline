@@ -107,7 +107,12 @@ Initial migration has been applied to Neon:
 
 ```txt
 packages/db/prisma/migrations/20260709050350_init_content_pipeline
+packages/db/prisma/migrations/20260709120000_add_subscriber_tokens
+packages/db/prisma/migrations/20260710013000_add_platform_connections
+packages/db/prisma/migrations/20260710023000_add_promotion_assets
 packages/db/prisma/migrations/20260711152000_add_notification_deliveries
+packages/db/prisma/migrations/20260713090000_add_platform_metric_snapshots
+packages/db/prisma/migrations/20260713193000_add_email_deliveries
 ```
 
 Core models currently exist for:
@@ -120,6 +125,12 @@ Core models currently exist for:
 - `PromotionAsset`
 - `Subscriber`
 - `NotificationDelivery`
+- `EmailDelivery`
+
+Migration audit:
+
+- Prisma records applied migrations in the `_prisma_migrations` table.
+- Latest confirmed applied migration: `20260713193000_add_email_deliveries`.
 
 Important post fields:
 
@@ -441,6 +452,10 @@ Implemented:
 - Manual latest-post send to active subscribers.
 - Automatic subscriber email after a successful first-time owned blog publish.
 - Email delivery logging and duplicate-send protection.
+- Substack subscriber CSV import command:
+  `npm run import:substack-subscribers -- /path/to/subscriber-export.csv`
+- Imported Substack subscribers on July 13, 2026:
+  345 parsed, 344 created, 1 already active, 345 active subscribers total.
 
 ### WhatsApp Notifications
 
@@ -467,6 +482,9 @@ Next checks:
 - Confirm the weekday morning and nightly Inngest template sends arrive end to end.
 - Use the delivery log in Settings to watch Twilio status, error codes, and message SIDs.
 - Keep nightly summaries tied to stored analytics snapshots instead of one-off live fetches.
+- July 13, 2026 9:00 PM nightly job ran but Twilio delivery failed with error `21656`.
+  The code now sanitizes Twilio ContentVariables before template sends; deploy this before
+  retesting nightly/morning manual triggers.
 
 ### dev.to Draft Publishing
 

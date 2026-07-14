@@ -62,6 +62,11 @@ enum PromotionAssetType {
   BLUESKY_POST
 }
 
+enum EmailKind {
+  NEWSLETTER_POST
+  TEST
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -114,6 +119,7 @@ model Post {
 
   publications PlatformPublication[]
   promotionAssets PromotionAsset[]
+  emailDeliveries EmailDelivery[]
 }
 
 model PlatformPublication {
@@ -212,4 +218,25 @@ model NotificationDelivery {
 
   @@index([channel, createdAt])
   @@index([messageSid])
+}
+
+model EmailDelivery {
+  id                String    @id @default(cuid())
+  kind              EmailKind
+  recipient         String?
+  recipientCount    Int       @default(0)
+  subject           String
+  providerMessageId String?
+  status            String
+  errorMessage      String?   @db.Text
+  bodyPreview       String?   @db.Text
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  postId String?
+  post   Post?   @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([kind, createdAt])
+  @@index([postId, kind])
+  @@index([providerMessageId])
 }

@@ -55,6 +55,8 @@ NEON_AUTH_BASE_URL
 NEON_AUTH_COOKIE_SECRET
 ADMIN_EMAIL
 ALLOW_ADMIN_SIGNUP              should be false after admin account exists
+RESEND_API_KEY
+NEWSLETTER_FROM_EMAIL
 DEVTO_API_KEY
 OPENAI_API_KEY
 OPENAI_IMAGE_MODEL              optional, defaults to gpt-image-2

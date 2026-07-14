@@ -3,7 +3,11 @@ import { db, formatDate } from "@content-pipeline/db";
 import type { SubscriberStatus } from "@content-pipeline/db";
 import { AdminShell } from "../components/AdminShell";
 import { SubmitButton } from "../components/SubmitButton";
-import { updateSubscriberStatus } from "./actions";
+import {
+  sendAdminTestNewsletterEmail,
+  sendLatestPostToActiveSubscribers,
+  updateSubscriberStatus,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +36,17 @@ const statusStyles: Record<SubscriberStatus, string> = {
 
 type SubscribersPageProps = {
   searchParams: Promise<{
+    email?: string;
     status?: string;
   }>;
+};
+
+const emailMessages: Record<string, string> = {
+  "already-sent": "The latest post was already sent to active subscribers.",
+  "no-active-subscribers": "No active subscribers were available for a newsletter send.",
+  partial: "Newsletter send completed with some failures. Check the delivery log.",
+  "sent-post": "Latest post sent to active subscribers.",
+  "sent-test": "Test newsletter email sent to the admin address.",
 };
 
 function validStatus(status?: string): SubscriberStatus | undefined {
@@ -45,11 +58,11 @@ function validStatus(status?: string): SubscriberStatus | undefined {
 }
 
 export default async function SubscribersPage({ searchParams }: SubscribersPageProps) {
-  const { status } = await searchParams;
+  const { email, status } = await searchParams;
   const selectedStatus = validStatus(status);
   const where = selectedStatus ? { status: selectedStatus } : {};
 
-  const [subscribers, counts] = await Promise.all([
+  const [subscribers, counts, latestPost, latestPublishedPost, emailDeliveries] = await Promise.all([
     db.subscriber.findMany({
       where,
       orderBy: [{ createdAt: "desc" }],
@@ -58,6 +71,60 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
       by: ["status"],
       _count: {
         status: true,
+      },
+    }),
+    db.post.findFirst({
+      where: {
+        status: {
+          in: [
+            "READY_TO_PUBLISH",
+            "PUBLISHED_BLOG",
+            "PUBLISHED_DEVTO",
+            "PROMOTED_LINKEDIN",
+            "PROMOTED_SOCIAL",
+            "COMPLETE",
+          ],
+        },
+        sourcePlatform: null,
+      },
+      orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        status: true,
+      },
+    }),
+    db.post.findFirst({
+      where: {
+        status: {
+          in: [
+            "PUBLISHED_BLOG",
+            "PUBLISHED_DEVTO",
+            "PROMOTED_LINKEDIN",
+            "PROMOTED_SOCIAL",
+            "COMPLETE",
+          ],
+        },
+        sourcePlatform: null,
+      },
+      orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        status: true,
+      },
+    }),
+    db.emailDelivery.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 8,
+      include: {
+        post: {
+          select: {
+            title: true,
+          },
+        },
       },
     }),
   ]);
@@ -73,6 +140,12 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
       eyebrow="Audience"
       title="Subscribers"
     >
+      {email ? (
+        <div className="mb-6 rounded-lg border border-orange-400/30 bg-orange-500/10 p-4 text-sm text-orange-200">
+          {emailMessages[email] || `Newsletter action finished: ${email}`}
+        </div>
+      ) : null}
+
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {statuses.map((item) => {
           const href = item === "ALL" ? "/subscribers" : `/subscribers?status=${item}`;
@@ -94,6 +167,104 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
             </Link>
           );
         })}
+      </section>
+
+      <section className="mt-6 rounded-lg border border-white/10 bg-[#141414] p-5">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+              Newsletter sending
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">
+              Send and test subscriber email
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              {latestPost
+                ? `Test preview uses: ${latestPost.title} (${latestPost.status.replaceAll("_", " ")}).`
+                : "No ready or published owned post is available yet."}
+              {" "}
+              {latestPublishedPost
+                ? `Subscriber send uses latest public post: ${latestPublishedPost.title}.`
+                : "Subscriber send waits until an owned post is public."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <form action={sendAdminTestNewsletterEmail}>
+              <SubmitButton pendingLabel="Sending test...">
+                Send admin test email
+              </SubmitButton>
+            </form>
+            <form action={sendLatestPostToActiveSubscribers}>
+              <SubmitButton
+                className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Sending post..."
+              >
+                Send latest post
+              </SubmitButton>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
+        <div className="border-b border-white/10 p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+            Delivery log
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold text-white">Recent email sends</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-white/10 text-sm">
+            <thead className="bg-black/40 text-left text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
+              <tr>
+                <th className="px-5 py-3">Time</th>
+                <th className="px-5 py-3">Kind</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Post</th>
+                <th className="px-5 py-3">Recipients</th>
+                <th className="px-5 py-3">Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {emailDeliveries.length > 0 ? (
+                emailDeliveries.map((delivery) => (
+                  <tr className="text-zinc-300" key={delivery.id}>
+                    <td className="px-5 py-4 align-top">{formatDate(delivery.createdAt)}</td>
+                    <td className="px-5 py-4 align-top">{delivery.kind}</td>
+                    <td className="px-5 py-4 align-top">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                          delivery.status === "SENT"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : delivery.status === "PARTIAL"
+                              ? "bg-amber-500/15 text-amber-300"
+                              : "bg-red-500/15 text-red-300"
+                        }`}
+                      >
+                        {delivery.status}
+                      </span>
+                    </td>
+                    <td className="max-w-xs px-5 py-4 align-top text-white">
+                      {delivery.post?.title || "-"}
+                    </td>
+                    <td className="px-5 py-4 align-top">
+                      {delivery.recipient || delivery.recipientCount}
+                    </td>
+                    <td className="max-w-md px-5 py-4 align-top text-zinc-400">
+                      {delivery.errorMessage || "-"}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-5 py-6 text-center text-zinc-500" colSpan={6}>
+                    No email sends recorded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">

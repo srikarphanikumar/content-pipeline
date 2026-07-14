@@ -39,6 +39,7 @@ export {
   removeLeadingCoverImage,
 } from "./markdown";
 export type {
+  EmailKind,
   Platform,
   PlatformMetricSnapshot,
   PlatformPublishStatus,
@@ -47,5 +48,6 @@ export type {
   PromotionAssetType,
   NotificationChannel,
   NotificationKind,
+  Subscriber,
   SubscriberStatus,
 } from "@prisma/client";

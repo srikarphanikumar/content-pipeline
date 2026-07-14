@@ -33,6 +33,7 @@ export async function GET() {
           <guid>${url}</guid>
           <description>${escapeXml(post.description || post.subtitle || "")}</description>
           <pubDate>${(post.publishedAt || post.createdAt).toUTCString()}</pubDate>
+          ${post.tags.map((tag) => `<category>${escapeXml(tag)}</category>`).join("")}
         </item>`;
     })
     .join("");
@@ -42,7 +43,9 @@ export async function GET() {
       <channel>
         <title>Under The Hood</title>
         <link>${baseUrl}</link>
-        <description>Frontend and AI internals that are usually skipped, simplified, or poorly explained elsewhere.</description>
+        <description>Deep technical essays on frontend internals, browser behavior, JavaScript, React, web performance, accessibility, and AI engineering.</description>
+        <language>en-us</language>
+        <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
         ${items}
       </channel>
     </rss>`;

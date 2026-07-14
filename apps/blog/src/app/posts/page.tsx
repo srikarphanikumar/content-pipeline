@@ -1,10 +1,27 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { db, formatDate, publishedPostStatuses } from "@content-pipeline/db";
 
 export const dynamic = "force-dynamic";
 
 const pageSize = 12;
+
+export const metadata: Metadata = {
+  title: "Posts",
+  description:
+    "Browse Under The Hood essays on frontend internals, browser behavior, JavaScript, React, web performance, accessibility, and AI engineering.",
+  alternates: {
+    canonical: "/posts",
+  },
+  openGraph: {
+    title: "Under The Hood Posts",
+    description:
+      "Browse deep technical essays on frontend internals, browser behavior, JavaScript, React, web performance, accessibility, and AI engineering.",
+    url: "https://blog.mspk.me/posts",
+    type: "website",
+  },
+};
 
 type PostsPageProps = {
   searchParams: Promise<{

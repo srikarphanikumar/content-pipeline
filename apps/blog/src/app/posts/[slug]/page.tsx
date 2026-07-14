@@ -29,8 +29,35 @@ export async function generateMetadata({ params }: PostPageProps) {
   }
 
   return {
-    title: `${post.title} | Under The Hood`,
+    title: post.title,
     description: post.description || post.subtitle || undefined,
+    alternates: {
+      canonical: `/posts/${post.slug}`,
+    },
+    openGraph: {
+      title: post.title,
+      description: post.description || post.subtitle || undefined,
+      url: `https://blog.mspk.me/posts/${post.slug}`,
+      siteName: "Under The Hood",
+      type: "article",
+      publishedTime: (post.publishedAt || post.createdAt).toISOString(),
+      modifiedTime: post.updatedAt.toISOString(),
+      tags: post.tags,
+      images: post.coverImageUrl
+        ? [
+            {
+              url: post.coverImageUrl,
+              alt: post.title,
+            },
+          ]
+        : undefined,
+    },
+    twitter: {
+      card: post.coverImageUrl ? "summary_large_image" : "summary",
+      title: post.title,
+      description: post.description || post.subtitle || undefined,
+      images: post.coverImageUrl ? [post.coverImageUrl] : undefined,
+    },
   };
 }
 
@@ -48,9 +75,35 @@ export default async function PostPage({ params }: PostPageProps) {
   if (!post) {
     notFound();
   }
+  const postUrl = `https://blog.mspk.me/posts/${post.slug}`;
+  const articleJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.description || post.subtitle || undefined,
+    datePublished: (post.publishedAt || post.createdAt).toISOString(),
+    dateModified: post.updatedAt.toISOString(),
+    mainEntityOfPage: postUrl,
+    url: postUrl,
+    author: {
+      "@type": "Person",
+      name: "Srikar Phanikumar Marti",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "Under The Hood",
+      url: "https://blog.mspk.me",
+    },
+    keywords: post.tags.join(", "),
+    image: post.coverImageUrl || undefined,
+  };
 
   return (
     <main className="min-h-screen bg-[#090909] text-[#f7f2ea]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+      />
       <div className="mx-auto max-w-7xl px-6 py-10">
         <nav className="flex items-center justify-between">
           <Link className="text-sm font-semibold text-white" href="/">

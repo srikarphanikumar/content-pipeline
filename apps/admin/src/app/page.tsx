@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink, SecondaryLink } from "./components/AdminShell";
+import { SubmitButton } from "./components/SubmitButton";
+import { collectAnalyticsNow } from "./analytics/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,9 @@ export default async function Home() {
     openTopics,
     devToDrafts,
     promotionAssets,
+    metricSnapshotsToday,
+    latestMetricSnapshot,
+    platformFailures,
     recentPosts,
   ] = await Promise.all([
     db.post.count({
@@ -58,6 +63,26 @@ export default async function Home() {
       },
     }),
     db.promotionAsset.count(),
+    db.platformMetricSnapshot.count({
+      where: {
+        capturedAt: {
+          gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        },
+      },
+    }),
+    db.platformMetricSnapshot.findFirst({
+      orderBy: {
+        capturedAt: "desc",
+      },
+      select: {
+        capturedAt: true,
+      },
+    }),
+    db.platformPublication.count({
+      where: {
+        status: "FAILED",
+      },
+    }),
     db.post.findMany({
       orderBy: [{ updatedAt: "desc" }],
       take: 6,
@@ -74,8 +99,8 @@ export default async function Home() {
     { href: "/posts", label: "This week", value: `${postsPublishedThisWeek} / 5`, tone: "Publishing pace" },
     { href: "/subscribers", label: "Subscribers", value: activeSubscribers.toString(), tone: "Confirmed readers" },
     { href: "/topics", label: "Open topics", value: `${openTopics} / ${Math.max(totalTopics, 1)}`, tone: "Backlog" },
-    { href: "/posts?view=archive", label: "dev.to drafts", value: devToDrafts.toString(), tone: "Syndication" },
-    { href: "/posts?view=archive", label: "Promo assets", value: promotionAssets.toString(), tone: "Generated copy" },
+    { href: "/analytics", label: "Snapshots today", value: metricSnapshotsToday.toString(), tone: "Analytics" },
+    { href: "/analytics", label: "Platform failures", value: platformFailures.toString(), tone: "Needs review" },
   ];
 
   const workflow = [
@@ -92,10 +117,12 @@ export default async function Home() {
       status: `${readyPosts} ready`,
     },
     {
-      title: "Cover images",
-      detail: "Generate or review the visual before sending the post into feed-based channels.",
-      href: "/posts?view=archive",
-      status: "Per post",
+      title: "Analytics",
+      detail: "Collect latest platform metrics and review what is working across channels.",
+      href: "/analytics",
+      status: latestMetricSnapshot
+        ? `Last ${latestMetricSnapshot.capturedAt.toLocaleDateString()}`
+        : "No snapshots",
     },
     {
       title: "dev.to drafts",
@@ -123,6 +150,7 @@ export default async function Home() {
         <>
           <PrimaryLink href="/posts/new">New post</PrimaryLink>
           <SecondaryLink href="/topics">Topic backlog</SecondaryLink>
+          <SecondaryLink href="/analytics">Analytics</SecondaryLink>
         </>
       }
       description="Operate the Under The Hood publishing loop from one place: topics, canonical posts, syndication, promotion, and subscribers."
@@ -146,6 +174,30 @@ export default async function Home() {
           </Link>
         ))}
       </div>
+
+      <section className="mt-6 rounded-lg border border-white/10 bg-[#141414] p-5">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
+              Latest stats
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">
+              Refresh platform analytics
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              Collect fresh dev.to, Bluesky, and permitted LinkedIn metrics before reviewing the dashboard.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <form action={collectAnalyticsNow}>
+              <SubmitButton pendingLabel="Collecting stats...">
+                Get latest stats
+              </SubmitButton>
+            </form>
+            <SecondaryLink href="/analytics">Open analytics</SecondaryLink>
+          </div>
+        </div>
+      </section>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <section className="overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
@@ -181,33 +233,48 @@ export default async function Home() {
             Recent posts
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
-            Pick up where you left off
+            Recent workspace activity
           </h2>
           <div className="mt-5 divide-y divide-white/10">
-            {recentPosts.map((post) => (
-              <Link
-                className="block py-4 transition hover:text-orange-300"
-                href={`/posts/${post.id}`}
-                key={post.id}
-              >
-                <p className="font-semibold text-white">{post.title}</p>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
-                  <span className="rounded-md bg-white/10 px-2 py-1 text-zinc-300">
-                    {post.status}
-                  </span>
-                  {post.publications.some((publication) => publication.platform === "DEVTO") ? (
-                    <span className="rounded-md bg-orange-500 px-2 py-1 text-black">
-                      dev.to
-                    </span>
-                  ) : null}
-                  {post.promotionAssets.length > 0 ? (
-                    <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-emerald-300">
-                      promo
-                    </span>
-                  ) : null}
-                </div>
-              </Link>
-            ))}
+            {recentPosts.length > 0 ? (
+              recentPosts.map((post) => {
+                const scheduledPublication = post.publications.find(
+                  (publication) => publication.status === "SCHEDULED",
+                );
+
+                return (
+                  <Link
+                    className="block py-4 transition hover:text-orange-300"
+                    href={`/posts/${post.id}`}
+                    key={post.id}
+                  >
+                    <p className="font-semibold text-white">{post.title}</p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+                      <span className="rounded-md bg-white/10 px-2 py-1 text-zinc-300">
+                        {post.status.replaceAll("_", " ")}
+                      </span>
+                      {scheduledPublication?.scheduledAt ? (
+                        <span className="rounded-md bg-orange-500/15 px-2 py-1 text-orange-300">
+                          scheduled {scheduledPublication.scheduledAt.toLocaleDateString()}
+                        </span>
+                      ) : null}
+                      {post.publications.some((publication) => publication.platform === "DEVTO") ? (
+                        <span className="rounded-md bg-orange-500 px-2 py-1 text-black">
+                          dev.to
+                        </span>
+                      ) : null}
+                      {post.promotionAssets.length > 0 ? (
+                        <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-emerald-300">
+                          promo
+                        </span>
+                      ) : null}
+                    </div>
+                  </Link>
+                );
+              })
+            ) : (
+              <p className="py-6 text-sm text-zinc-500">No recent post activity yet.</p>
+            )}
           </div>
         </section>
       </div>

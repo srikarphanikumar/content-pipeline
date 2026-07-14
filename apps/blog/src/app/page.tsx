@@ -1,30 +1,16 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { db } from "@content-pipeline/db";
 import { subscribe } from "./subscribe/actions";
 
 export const dynamic = "force-dynamic";
 
-const placeholderPosts = [
-  {
-    title: "The Hidden Cost of Hydration in AI-Heavy Frontends",
-    tag: "Frontend Internals",
-    excerpt:
-      "A practical look at why AI UI patterns make hydration budgets harder to reason about.",
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/",
   },
-  {
-    title: "Running Models in the Browser Without Wrecking Core Web Vitals",
-    tag: "AI in Browser",
-    excerpt:
-      "What actually happens when client-side inference meets real user performance constraints.",
-  },
-  {
-    title: "Why Streaming LLM Responses Change Your Component Architecture",
-    tag: "AI UX",
-    excerpt:
-      "The UI patterns that emerge when text is not a value, but a timeline.",
-  },
-];
+};
 
 type HomeProps = {
   searchParams: Promise<{
@@ -123,11 +109,11 @@ export default async function Home({ searchParams }: HomeProps) {
               Under The Hood is the owned archive for the deep dives.
             </h2>
             <p className="mt-5 text-base leading-7 text-zinc-300">
-              Posts start here, syndicate outward to developer platforms, and
-              point readers back to a durable newsletter you control.
+              The full essays live here first, with a durable archive and a
+              newsletter for readers who want the next deep dive directly.
             </p>
             <div className="mt-8 rounded-md bg-orange-500 p-4 text-sm font-semibold text-black">
-              Current archive: 50 imported Substack posts and counting.
+              Current archive: imported Substack essays and new posts from this home.
             </div>
           </div>
         </div>
@@ -180,21 +166,21 @@ export default async function Home({ searchParams }: HomeProps) {
                 Latest
               </p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-                Latest from the archive
+                Latest essays
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-stone-600">
-              The newest entries from the canonical Under The Hood archive.
+              New posts and selected archive entries from the canonical Under The Hood home.
             </p>
           </div>
 
           <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {(posts.length > 0 ? posts : placeholderPosts).map((post) => (
+            {posts.map((post) => (
               <article
                 className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition hover:-translate-y-1 hover:border-orange-400 hover:shadow-lg"
                 key={post.title}
               >
-                {"coverImageUrl" in post && post.coverImageUrl ? (
+                {post.coverImageUrl ? (
                   <Image
                     alt=""
                     className="aspect-video w-full object-cover"
@@ -205,22 +191,24 @@ export default async function Home({ searchParams }: HomeProps) {
                 ) : null}
                 <div className="p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-600">
-                    {"tags" in post && post.tags.length > 0
-                      ? post.tags[0]
-                      : "tag" in post
-                        ? post.tag
-                        : "Under The Hood"}
+                    {post.tags.length > 0 ? post.tags[0] : "Under The Hood"}
                   </p>
                   <h3 className="mt-3 text-xl font-semibold leading-7">
-                    {"slug" in post ? (
-                      <Link href={`/posts/${post.slug}`}>{post.title}</Link>
-                    ) : (
-                      post.title
-                    )}
+                    <Link href={`/posts/${post.slug}`}>{post.title}</Link>
                   </h3>
+                  {post.description ? (
+                    <p className="mt-3 text-sm leading-6 text-stone-600">
+                      {post.description}
+                    </p>
+                  ) : null}
                 </div>
               </article>
             ))}
+            {posts.length === 0 ? (
+              <div className="rounded-lg border border-stone-200 bg-white p-6 text-stone-600 md:col-span-3">
+                New essays will appear here after they are published.
+              </div>
+            ) : null}
           </div>
           <Link
             className="mt-8 inline-flex h-10 items-center rounded-md border border-stone-300 px-4 text-sm font-semibold text-stone-900 transition hover:border-orange-500 hover:text-orange-700"

@@ -45,6 +45,8 @@ DATABASE_URL
 BLOG_BASE_URL                    optional, defaults to https://blog.mspk.me
 RESEND_API_KEY
 NEWSLETTER_FROM_EMAIL
+NEWSLETTER_DAILY_SEND_LIMIT      optional, defaults to 5000 for Resend Pro
+NEWSLETTER_SEND_BATCH_SIZE       optional, defaults to 500
 ```
 
 Admin/pipeline:
@@ -452,6 +454,8 @@ Implemented:
 - Manual latest-post send to active subscribers.
 - Automatic subscriber email after a successful first-time owned blog publish.
 - Email delivery logging and duplicate-send protection.
+- Resend Pro-sized batching defaults:
+  `NEWSLETTER_DAILY_SEND_LIMIT=5000`, `NEWSLETTER_SEND_BATCH_SIZE=500`.
 - Substack subscriber CSV import command:
   `npm run import:substack-subscribers -- /path/to/subscriber-export.csv`
 - Imported Substack subscribers on July 13, 2026:

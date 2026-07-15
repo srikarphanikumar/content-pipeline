@@ -42,10 +42,12 @@ type SubscribersPageProps = {
 };
 
 const emailMessages: Record<string, string> = {
+  "all-recipients-sent": "This post has already been sent to every active subscriber.",
   "already-sent": "The latest post was already sent to active subscribers.",
+  "daily-limit": "Daily newsletter send cap reached. Continue the remaining subscribers tomorrow.",
   "no-active-subscribers": "No active subscribers were available for a newsletter send.",
   "no-published-post": "No published owned post is available for a subscriber send yet.",
-  partial: "Newsletter send completed with some failures. Check the delivery log.",
+  partial: "Newsletter send completed for today's batch. Check the delivery log for remaining subscribers or failures.",
   "sent-post": "Latest post sent to active subscribers.",
   "sent-test": "Test newsletter email sent to the admin address.",
 };

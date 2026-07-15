@@ -1,4 +1,5 @@
 import type { Post } from "@content-pipeline/db";
+import { learningResourceMarkdown } from "./learning-resources";
 
 type DevToArticleResponse = {
   id: number;
@@ -24,13 +25,18 @@ function devToTags(tags: string[]) {
 
 function devToBody(post: Post) {
   const canonicalUrl = postUrl(post);
+  const learningResources = learningResourceMarkdown(post);
   const cta = [
     "---",
     "",
+    learningResources,
+    learningResources ? "" : null,
     `Originally published at [Under The Hood](${canonicalUrl}).`,
     "",
     `Get the next deep dive in your inbox: [subscribe to Under The Hood](${blogBaseUrl()}/#subscribe).`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return `${post.bodyMarkdown.trim()}\n\n${cta}`;
 }

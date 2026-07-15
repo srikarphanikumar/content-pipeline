@@ -18,6 +18,42 @@ async function recordEmailDelivery(input: Parameters<typeof db.emailDelivery.cre
   });
 }
 
+function positiveIntEnv(key: string, fallback: number) {
+  const value = Number(process.env[key]);
+
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function todayStartNewYork() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/New_York",
+    year: "numeric",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), 4));
+}
+
+async function ownNewsletterSendCountToday() {
+  const deliveries = await db.emailDelivery.findMany({
+    where: {
+      createdAt: {
+        gte: todayStartNewYork(),
+      },
+      status: {
+        in: ["SENT", "PARTIAL"],
+      },
+    },
+    select: {
+      recipientCount: true,
+    },
+  });
+
+  return deliveries.reduce((total, delivery) => total + delivery.recipientCount, 0);
+}
+
 export async function latestNewsletterPost() {
   const post = await db.post.findFirst({
     where: {
@@ -136,9 +172,7 @@ export async function sendPostToActiveSubscribers(postId: string) {
     where: {
       kind: "NEWSLETTER_POST",
       postId: post.id,
-      status: {
-        in: ["SENT", "PARTIAL"],
-      },
+      status: "SENT",
     },
   });
 
@@ -149,12 +183,62 @@ export async function sendPostToActiveSubscribers(postId: string) {
     };
   }
 
+  const alreadySentAfter = post.publishedAt || post.updatedAt || post.createdAt;
+  const configuredBatchSize = positiveIntEnv("NEWSLETTER_SEND_BATCH_SIZE", 500);
+  const dailySendLimit = positiveIntEnv("NEWSLETTER_DAILY_SEND_LIMIT", 5000);
+  const sentToday = await ownNewsletterSendCountToday();
+  const availableToday = Math.max(0, dailySendLimit - sentToday);
+  const take = Math.min(configuredBatchSize, availableToday);
+
+  if (take === 0) {
+    await recordEmailDelivery({
+      bodyPreview: post.description || post.subtitle || post.title,
+      errorMessage: `Daily newsletter send cap reached for today (${sentToday}/${dailySendLimit}). Continue tomorrow.`,
+      kind: "NEWSLETTER_POST",
+      postId: post.id,
+      recipientCount: 0,
+      status: "SKIPPED",
+      subject: `New Under The Hood post: ${post.title}`,
+    });
+
+    return {
+      skipped: true,
+      status: "DAILY_LIMIT_REACHED",
+    };
+  }
+
   const subscribers = await db.subscriber.findMany({
     where: {
       status: "ACTIVE",
+      OR: [
+        {
+          lastEmailSentAt: null,
+        },
+        {
+          lastEmailSentAt: {
+            lt: alreadySentAfter,
+          },
+        },
+      ],
     },
     orderBy: {
       createdAt: "asc",
+    },
+    take,
+  });
+  const remainingAfterBatch = await db.subscriber.count({
+    where: {
+      status: "ACTIVE",
+      OR: [
+        {
+          lastEmailSentAt: null,
+        },
+        {
+          lastEmailSentAt: {
+            lt: alreadySentAfter,
+          },
+        },
+      ],
     },
   });
   const subject = `New Under The Hood post: ${post.title}`;
@@ -172,7 +256,7 @@ export async function sendPostToActiveSubscribers(postId: string) {
 
     return {
       skipped: true,
-      status: "NO_ACTIVE_SUBSCRIBERS",
+      status: remainingAfterBatch === 0 ? "ALL_RECIPIENTS_ALREADY_SENT" : "NO_ACTIVE_SUBSCRIBERS",
     };
   }
 
@@ -204,11 +288,24 @@ export async function sendPostToActiveSubscribers(postId: string) {
     }
   }
 
-  const status = failures.length === 0 ? "SENT" : sentCount > 0 ? "PARTIAL" : "FAILED";
+  const remainingUnsent = Math.max(0, remainingAfterBatch - sentCount);
+  const status =
+    failures.length === 0 && remainingUnsent === 0
+      ? "SENT"
+      : sentCount > 0
+        ? "PARTIAL"
+        : "FAILED";
+  const statusNote =
+    remainingUnsent > 0
+      ? `${remainingUnsent} active subscribers still need this post. Continue after the daily limit resets.`
+      : null;
 
   await recordEmailDelivery({
     bodyPreview: post.description || post.subtitle || post.title,
-    errorMessage: failures.length > 0 ? failures.slice(0, 20).join("\n") : null,
+    errorMessage:
+      failures.length > 0
+        ? [statusNote, ...failures.slice(0, 20)].filter(Boolean).join("\n")
+        : statusNote,
     kind: "NEWSLETTER_POST",
     postId: post.id,
     providerMessageId: lastProviderMessageId,
@@ -219,6 +316,7 @@ export async function sendPostToActiveSubscribers(postId: string) {
 
   return {
     failed: failures.length,
+    remaining: remainingUnsent,
     sent: sentCount,
     status,
   };

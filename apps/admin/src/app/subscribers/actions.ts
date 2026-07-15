@@ -78,6 +78,14 @@ export async function sendLatestPostToActiveSubscribers() {
     redirect("/subscribers?email=no-active-subscribers");
   }
 
+  if (result.status === "ALL_RECIPIENTS_ALREADY_SENT") {
+    redirect("/subscribers?email=all-recipients-sent");
+  }
+
+  if (result.status === "DAILY_LIMIT_REACHED") {
+    redirect("/subscribers?email=daily-limit");
+  }
+
   revalidatePath("/subscribers");
   redirect(result.status === "SENT" ? "/subscribers?email=sent-post" : "/subscribers?email=partial");
 }

@@ -1,5 +1,10 @@
 import OpenAI from "openai";
 import type { Post } from "@content-pipeline/db";
+import {
+  learningResourceHashtags,
+  learningResourceLinkedInLine,
+  learningResourcePromptContext,
+} from "./learning-resources";
 
 type PromotionCopy = {
   linkedInPost: string;
@@ -41,6 +46,7 @@ function hashtagFromTag(tag: string) {
 function linkedInHashtags(post: Post) {
   const baseTags = [
     ...post.tags.map(hashtagFromTag),
+    ...learningResourceHashtags(post).map((tag) => tag.replace(/^#/, "")),
     "Frontend",
     "FrontendEngineering",
     "WebDevelopment",
@@ -65,6 +71,7 @@ function linkedInHashtags(post: Post) {
 function linkedInCommentHashtags(post: Post) {
   const baseTags = [
     ...post.tags.map(hashtagFromTag),
+    ...learningResourceHashtags(post).map((tag) => tag.replace(/^#/, "")),
     "Frontend",
     "JavaScript",
     "TypeScript",
@@ -93,6 +100,7 @@ function linkedInCommentHashtags(post: Post) {
 function blueskyHashtags(post: Post) {
   const baseTags = [
     ...post.tags.map(hashtagFromTag),
+    ...learningResourceHashtags(post).map((tag) => tag.replace(/^#/, "")),
     "Frontend",
     "JavaScript",
     "WebDev",
@@ -125,6 +133,7 @@ function blueskyCopy(post: Post, summary: string, url: string) {
 function fallbackPromotionCopy(post: Post): PromotionCopy {
   const url = postUrl(post);
   const summary = post.description || post.subtitle || "A new Under The Hood deep dive is live.";
+  const resourceLine = learningResourceLinkedInLine(post);
 
   return {
     linkedInPost: [
@@ -139,12 +148,16 @@ function fallbackPromotionCopy(post: Post): PromotionCopy {
       "✅ How to reason about the problem when debugging",
       "",
       "Once you understand the mechanics, the behavior gets much easier to predict.",
+      resourceLine ? "" : null,
+      resourceLine || null,
       "",
       "📖 Read the full article:",
       url,
       "",
       linkedInHashtags(post),
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
     linkedInFirstComment: [
       `Read the full essay and subscribe for future Under The Hood deep dives: ${url}`,
       "",
@@ -192,9 +205,11 @@ export async function generatePromotionCopy(post: Post): Promise<PromotionCopy> 
           "Generate promotion copy for this article.",
           "",
           "Return JSON with exactly these keys:",
-          "- linkedInPost: formatted like a strong technical LinkedIn post, 130-230 words. Use this structure: hook line, blank line, short problem/context paragraph, blank line, 'Inside you'll learn:' or 'In this article, I break down:', 4-6 checklist bullets using ✅, blank line, a concluding sentence, blank line, '📖 Read the full article:', canonical URL, blank line, 12-18 highly relevant hashtags. Include article-specific tags first, then broader discovery tags. Do not use markdown bullets. Do not sound salesy.",
-          "- linkedInFirstComment: one short CTA sentence pointing to the canonical URL and newsletter, blank line, then 15-25 relevant hashtags. Include tags for the article topic, frontend/software engineering, JavaScript/TypeScript/React/AI when relevant, and broader developer discovery. Avoid unrelated trend tags.",
+          "- linkedInPost: formatted like a strong technical LinkedIn post, 130-230 words. Use this structure: hook line, blank line, short problem/context paragraph, blank line, 'Inside you'll learn:' or 'In this article, I break down:', 4-6 checklist bullets using ✅, blank line, a concluding sentence, optional one-line helpful-resource mention if relevant, blank line, '📖 Read the full article:', canonical URL, blank line, 12-18 highly relevant hashtags. Include article-specific tags first, then broader discovery tags. Do not use markdown bullets. Do not sound salesy.",
+          "- linkedInFirstComment: one short CTA sentence pointing to the canonical URL and newsletter, blank line, then 15-25 relevant hashtags. Include tags for the article topic, recommended learning resources, frontend/software engineering, JavaScript/TypeScript/React/AI when relevant, and broader developer discovery. Avoid unrelated trend tags.",
           "- blueskyPost: <= 300 characters including the URL. Direct and punchy. Include 3-6 relevant hashtags at the end, prioritizing article-specific tags and developer discovery tags.",
+          "",
+          learningResourcePromptContext(post),
           "",
           postContext(post),
         ].join("\n"),

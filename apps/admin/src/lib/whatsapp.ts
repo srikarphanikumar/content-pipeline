@@ -27,6 +27,7 @@ const twilioErrorMessages: Record<string, string> = {
   "21656": "Invalid Twilio ContentVariables. Template variables must match the approved content template format.",
   "63016": "WhatsApp message could not be delivered. Check template approval, sender status, and recipient/session rules.",
   "63049": "WhatsApp delivery failed at Meta/Twilio. Check WhatsApp sender, template, and recipient eligibility.",
+  "63112": "Meta disabled or restricted the connected WhatsApp Business Account. Check Meta business verification, WhatsApp account status, and Twilio sender health.",
 };
 
 function twilioConfigured() {

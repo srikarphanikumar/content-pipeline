@@ -1,5 +1,6 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { XMLParser } from "fast-xml-parser";
 import TurndownService from "turndown";
 import {
@@ -124,6 +125,8 @@ function feedUrlFromInput(value: string) {
 }
 
 export async function previewSubstackFeed(formData: FormData) {
+  await requireAdmin();
+
   const rawUrl = formData.get("feedUrl");
   const feedUrl = feedUrlFromInput(typeof rawUrl === "string" ? rawUrl : "");
 
@@ -206,6 +209,8 @@ export async function previewSubstackFeed(formData: FormData) {
 }
 
 export async function importSubstackFeed(formData: FormData) {
+  await requireAdmin();
+
   const preview = await previewSubstackFeed(formData);
   let imported = 0;
   let skipped = 0;

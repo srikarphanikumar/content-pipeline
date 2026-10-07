@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@content-pipeline/db";
-import { generateNextBacklogTopics } from "../../../topics/actions";
+import { generateNextBacklogTopics } from "@/app/topics/pipeline";
 
 export const dynamic = "force-dynamic";
 

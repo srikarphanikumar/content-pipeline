@@ -1,5 +1,6 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, parseTags, slugify } from "@content-pipeline/db";
@@ -204,6 +205,8 @@ async function isCanonicalBlogPublished(postId: string, status: PostStatus) {
 }
 
 export async function createPost(formData: FormData) {
+  await requireAdmin();
+
   const title = stringValue(formData, "title");
   const slug = slugify(stringValue(formData, "slug") || title);
   const status = statusValue(formData);
@@ -232,6 +235,8 @@ export async function createPost(formData: FormData) {
 }
 
 export async function updatePost(postId: string, formData: FormData) {
+  await requireAdmin();
+
   const title = stringValue(formData, "title");
   const slug = slugify(stringValue(formData, "slug") || title);
 
@@ -262,6 +267,8 @@ export async function updatePost(postId: string, formData: FormData) {
 }
 
 export async function deletePipelinePost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -296,6 +303,8 @@ export async function deletePipelinePost(postId: string) {
 }
 
 export async function clearPipelineQueue() {
+  await requireAdmin();
+
   await db.post.deleteMany({
     where: {
       sourcePlatform: null,
@@ -311,6 +320,8 @@ export async function clearPipelineQueue() {
 }
 
 export async function generateCoverImageForPost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -338,6 +349,8 @@ export async function generateCoverImageForPost(postId: string) {
 }
 
 export async function publishBlogCanonicalPost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -413,6 +426,8 @@ export async function publishBlogCanonicalPost(postId: string) {
 }
 
 export async function schedulePostForTomorrow(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -479,6 +494,8 @@ export async function schedulePostForTomorrow(postId: string) {
 }
 
 export async function createDevToDraftForPost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -553,6 +570,8 @@ export async function createDevToDraftForPost(postId: string) {
 }
 
 export async function recreateDevToDraftForPost(postId: string) {
+  await requireAdmin();
+
   await db.platformPublication.upsert({
     where: {
       postId_platform: {
@@ -578,6 +597,8 @@ export async function recreateDevToDraftForPost(postId: string) {
 }
 
 export async function publishDevToSyndicationForPost(postId: string) {
+  await requireAdmin();
+
   const [post, existingPublication] = await Promise.all([
     db.post.findUnique({
       where: {
@@ -623,6 +644,8 @@ export async function publishDevToSyndicationForPost(postId: string) {
 }
 
 export async function generatePromotionAssetsForPost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -690,6 +713,8 @@ export async function generatePromotionAssetsForPost(postId: string) {
 }
 
 export async function updatePromotionAssetsForPost(postId: string, formData: FormData) {
+  await requireAdmin();
+
   const linkedInPost = stringValue(formData, "linkedInPost");
   const linkedInFirstComment = stringValue(formData, "linkedInFirstComment");
   const blueskyPost = stringValue(formData, "blueskyPost");
@@ -749,6 +774,8 @@ export async function updatePromotionAssetsForPost(postId: string, formData: For
 }
 
 export async function publishLinkedInPromotionForPost(postId: string) {
+  await requireAdmin();
+
   const [post, linkedInPost, connection] = await Promise.all([
     db.post.findUnique({
       where: {
@@ -801,6 +828,8 @@ export async function publishLinkedInPromotionForPost(postId: string) {
 }
 
 export async function publishBlueskyPromotionForPost(postId: string) {
+  await requireAdmin();
+
   const blueskyPost = await promotionAssetContent(postId, "BLUESKY_POST");
   const publication = await startPlatformPublication(postId, "BLUESKY");
 
@@ -826,6 +855,8 @@ export async function publishBlueskyPromotionForPost(postId: string) {
 }
 
 export async function publishSyndicationAndSocialsForPost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -931,6 +962,8 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
 }
 
 export async function approveAndPublishPost(postId: string) {
+  await requireAdmin();
+
   const post = await db.post.findUnique({
     where: {
       id: postId,

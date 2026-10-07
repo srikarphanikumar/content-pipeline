@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
-import { generateBacklogTopics } from "@/app/topics/actions";
+import { generateBacklogTopics } from "@/app/topics/pipeline";
+import { getAdminUser } from "@/lib/auth/require-admin";
+
+async function isAuthorized(request: Request) {
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`) {
+    return true;
+  }
+
+  return Boolean(await getAdminUser());
+}
 
 export async function POST(request: Request) {
+  if (!(await isAuthorized(request))) {
+    return NextResponse.json({ error: "Unauthorized", ok: false }, { status: 401 });
+  }
+
   try {
     let count = 20;
 

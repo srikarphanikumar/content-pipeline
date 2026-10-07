@@ -1,5 +1,6 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@content-pipeline/db";
@@ -12,6 +13,8 @@ import {
 const editableStatuses: SubscriberStatus[] = ["ACTIVE", "UNSUBSCRIBED"];
 
 export async function updateSubscriberStatus(subscriberId: string, formData: FormData) {
+  await requireAdmin();
+
   const status = formData.get("status");
 
   if (typeof status !== "string" || !editableStatuses.includes(status as SubscriberStatus)) {
@@ -41,6 +44,8 @@ export async function updateSubscriberStatus(subscriberId: string, formData: For
 }
 
 export async function sendAdminTestNewsletterEmail() {
+  await requireAdmin();
+
   await sendAdminTestNewsletterForPost();
 
   revalidatePath("/subscribers");
@@ -48,6 +53,8 @@ export async function sendAdminTestNewsletterEmail() {
 }
 
 export async function sendLatestPostToActiveSubscribers() {
+  await requireAdmin();
+
   const post = await db.post.findFirst({
     where: {
       status: {

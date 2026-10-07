@@ -9,6 +9,7 @@ import { generatePromotionCopy } from "@/lib/promotion";
 type GeneratedTopic = {
   title: string;
   description: string;
+  focusArea?: string | null;
   noveltyScore: number | null;
   audienceFit: number | null;
   difficulty: number | null;
@@ -25,7 +26,20 @@ type GeneratedDraft = {
 type TopicGenerationResult = {
   createdCount: number;
   requestedCount: number;
-  source: "fallback" | "mixed" | "openai";
+  source: "fallback" | "openai";
+};
+
+type TopicGenerationOptions = {
+  count?: number;
+  focusAreaIds?: string[];
+  seed?: string;
+};
+
+type FocusAreaContext = {
+  id: string;
+  name: string;
+  angle: string | null;
+  weight: number;
 };
 
 function stringValue(formData: FormData, key: string) {
@@ -226,6 +240,7 @@ function parseGeneratedTopics(value: string) {
     topics?: Array<{
       title?: unknown;
       description?: unknown;
+      focusArea?: unknown;
       noveltyScore?: unknown;
       audienceFit?: unknown;
       difficulty?: unknown;
@@ -236,6 +251,7 @@ function parseGeneratedTopics(value: string) {
     .map((topic) => ({
       title: typeof topic.title === "string" ? topic.title.trim() : "",
       description: typeof topic.description === "string" ? topic.description.trim() : "",
+      focusArea: typeof topic.focusArea === "string" ? topic.focusArea.trim() : null,
       noveltyScore: scoreValue(topic.noveltyScore),
       audienceFit: scoreValue(topic.audienceFit),
       difficulty: scoreValue(topic.difficulty),
@@ -354,6 +370,7 @@ export async function createTopic(formData: FormData) {
       noveltyScore: numberValue(formData, "noveltyScore"),
       audienceFit: numberValue(formData, "audienceFit"),
       difficulty: numberValue(formData, "difficulty"),
+      focusAreaId: stringValue(formData, "focusAreaId") || null,
       status: stringValue(formData, "status") || "backlog",
     },
   });
@@ -362,8 +379,8 @@ export async function createTopic(formData: FormData) {
   revalidatePath("/topics");
 }
 
-export async function generateNextBacklogTopics() {
-  const result = await generateBacklogTopics();
+export async function generateNextBacklogTopics(options: TopicGenerationOptions = {}) {
+  const result = await generateBacklogTopics(options.count, options);
 
   revalidatePath("/");
   revalidatePath("/topics");
@@ -371,24 +388,115 @@ export async function generateNextBacklogTopics() {
   return result;
 }
 
-export async function generateNextBacklogTopicsFromForm() {
+function generationResultParams(result: TopicGenerationResult) {
   const params = new URLSearchParams();
+  params.set("generated", String(result.createdCount));
+  params.set("source", result.source);
+  return params;
+}
+
+export async function generateNextBacklogTopicsFromForm(formData: FormData) {
+  let params = new URLSearchParams({ generated: "error" });
 
   try {
-    const result = await generateNextBacklogTopics();
-    params.set("generated", String(result.createdCount));
-    params.set("source", result.source);
+    const result = await generateNextBacklogTopics({
+      count: numberValue(formData, "count") || 10,
+      focusAreaIds: formData
+        .getAll("focusAreaId")
+        .filter((id): id is string => typeof id === "string" && id !== ""),
+    });
+    params = generationResultParams(result);
   } catch (error) {
     console.error("Topic generation failed.", error);
-    params.set("generated", "error");
   }
 
   redirect(`/topics?${params.toString()}`);
 }
 
-export async function generateBacklogTopics(requestedCount = 20): Promise<TopicGenerationResult> {
-  const normalizedRequestedCount = Math.min(Math.max(Math.round(requestedCount), 1), 50);
-  const [publishedPosts, queuePosts, existingTopics] = await Promise.all([
+export async function brainstormTopicsFromForm(formData: FormData) {
+  const seed = stringValue(formData, "seed").slice(0, 300);
+  const focusAreaId = stringValue(formData, "focusAreaId");
+  let params = new URLSearchParams({ generated: "error" });
+
+  if (!seed) {
+    redirect("/topics");
+  }
+
+  try {
+    const result = await generateNextBacklogTopics({
+      count: numberValue(formData, "count") || 5,
+      focusAreaIds: focusAreaId ? [focusAreaId] : [],
+      seed,
+    });
+    params = generationResultParams(result);
+  } catch (error) {
+    console.error("Topic brainstorm failed.", error);
+  }
+
+  redirect(`/topics?${params.toString()}`);
+}
+
+function allocateIdeas(focusAreas: FocusAreaContext[], total: number) {
+  const totalWeight = focusAreas.reduce((sum, area) => sum + Math.max(area.weight, 1), 0);
+  const shares = focusAreas.map((area) => {
+    const exact = (total * Math.max(area.weight, 1)) / totalWeight;
+    return { area, count: Math.floor(exact), remainder: exact - Math.floor(exact) };
+  });
+  let remaining = total - shares.reduce((sum, share) => sum + share.count, 0);
+
+  for (const share of [...shares].sort((a, b) => b.remainder - a.remainder)) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    share.count += 1;
+    remaining -= 1;
+  }
+
+  return shares
+    .filter((share) => share.count > 0)
+    .map((share) => ({
+      name: share.area.name,
+      angle: share.area.angle,
+      ideaCount: share.count,
+    }));
+}
+
+async function resolveFocusAreas(options: TopicGenerationOptions): Promise<FocusAreaContext[]> {
+  const select = { id: true, name: true, angle: true, weight: true };
+
+  if (options.focusAreaIds && options.focusAreaIds.length > 0) {
+    return db.focusArea.findMany({
+      where: {
+        id: {
+          in: options.focusAreaIds,
+        },
+      },
+      orderBy: [{ name: "asc" }],
+      select,
+    });
+  }
+
+  // A seed without an explicit area stays unassigned rather than being forced into one.
+  if (options.seed) {
+    return [];
+  }
+
+  return db.focusArea.findMany({
+    where: {
+      active: true,
+    },
+    orderBy: [{ name: "asc" }],
+    select,
+  });
+}
+
+export async function generateBacklogTopics(
+  requestedCount = 20,
+  options: TopicGenerationOptions = {},
+): Promise<TopicGenerationResult> {
+  const normalizedRequestedCount = Math.min(Math.max(Math.round(requestedCount), 1), 20);
+  const [publishedPosts, queuePosts, existingTopics, focusAreas] = await Promise.all([
     db.post.findMany({
       where: {
         OR: [
@@ -434,6 +542,7 @@ export async function generateBacklogTopics(requestedCount = 20): Promise<TopicG
         status: true,
       },
     }),
+    resolveFocusAreas(options),
   ]);
   const publishedTitles = publishedPosts.map((post) => post.title);
   const existingTitles = [
@@ -441,82 +550,110 @@ export async function generateBacklogTopics(requestedCount = 20): Promise<TopicG
     ...existingTopics.map((topic) => topic.title),
   ];
   const apiKey = process.env.OPENAI_API_KEY;
-  const fallbackIdeas = fallbackTopics(publishedTitles, existingTitles);
-  let ideas: GeneratedTopic[] = fallbackIdeas;
-  let source: TopicGenerationResult["source"] = "fallback";
+  const seed = options.seed?.trim();
+  let ideas: GeneratedTopic[];
+  let source: TopicGenerationResult["source"];
 
   if (apiKey) {
     const openai = new OpenAI({ apiKey });
-    try {
-      const openAiTargetCount = Math.min(20, normalizedRequestedCount);
-      const response = await openai.chat.completions.create(
-        {
-          model: "gpt-4.1-mini",
-          temperature: 0.65,
-          max_tokens: 5200,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are the editorial strategist for Under The Hood, a technical publication for frontend, JavaScript, full-stack, browser internals, performance, and AI engineers. Return only valid JSON.",
-            },
-            {
-              role: "user",
-              content: [
-                `Generate ${openAiTargetCount} new article backlog ideas.`,
-                "",
-                "Rules:",
-                "- Do not duplicate or lightly rename already published titles.",
-                "- Do not duplicate current queue or topic titles.",
-                "- Create a balanced mix across accessibility, browser internals, CSS, React architecture, frontend performance, AI UX, and debugging.",
-                "- Do not make every title about AI. AI-related topics are welcome, but they should be only part of the batch.",
-                "- Avoid generic accessibility checklists and generic AI takes.",
-                "- Prefer concrete browser, React, DOM, ARIA, focus, keyboard, screen reader, design system, AI-generated UI, or frontend architecture mechanisms.",
-                "- Each idea should fit the Under The Hood style: explain mechanisms, tradeoffs, debugging, review models, and production implications.",
-                `- Return exactly ${openAiTargetCount} ideas if possible.`,
-                "- Return JSON with key topics, an array of objects: title, description, noveltyScore, audienceFit, difficulty.",
-                "- Scores are integers from 1 to 10.",
-                "",
-                "Already published posts:",
-                JSON.stringify(publishedPosts),
-                "",
-                "Current post queue:",
-                JSON.stringify(queuePosts),
-                "",
-                "Existing topic backlog:",
-                JSON.stringify(existingTopics),
-              ].join("\n"),
-            },
-          ],
-        },
-        {
-          timeout: 25_000,
-        },
-      );
-      const content = response.choices[0]?.message.content;
+    // Ask for a few extra so de-duplication doesn't leave the batch short.
+    const openAiTargetCount = normalizedRequestedCount + 3;
+    const focusAreaPlan = allocateIdeas(focusAreas, openAiTargetCount);
+    const response = await openai.chat.completions.create(
+      {
+        model: "gpt-4.1-mini",
+        temperature: 0.65,
+        max_tokens: 5200,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are the editorial strategist for Under The Hood, a technical publication for software engineers that explains how things actually work. Return only valid JSON.",
+          },
+          {
+            role: "user",
+            content: [
+              `Generate ${openAiTargetCount} new article backlog ideas.`,
+              "",
+              "Rules:",
+              "- Do not duplicate or lightly rename already published titles.",
+              "- Do not duplicate current queue or topic titles.",
+              ...(seed
+                ? [`- Every idea must be a distinct, specific angle on this seed topic: ${JSON.stringify(seed)}.`]
+                : []),
+              ...(focusAreaPlan.length > 0
+                ? [
+                    "- Only generate ideas inside the focus areas listed below. Follow each area's angle and idea count.",
+                    "- Set focusArea on every idea to exactly one focus area name from the list.",
+                  ]
+                : seed
+                  ? ["- Set focusArea to null on every idea."]
+                  : [
+                      "- Create a balanced mix of subjects that fit the publication.",
+                      "- Set focusArea to null on every idea.",
+                    ]),
+              "- Avoid generic checklists and generic hot takes.",
+              "- Prefer concrete mechanisms: what the runtime, browser, framework, or system is actually doing.",
+              "- Each idea should fit the Under The Hood style: explain mechanisms, tradeoffs, debugging, review models, and production implications.",
+              `- Return exactly ${openAiTargetCount} ideas if possible.`,
+              "- Return JSON with key topics, an array of objects: title, description, focusArea, noveltyScore, audienceFit, difficulty.",
+              "- Scores are integers from 1 to 10.",
+              "",
+              ...(focusAreaPlan.length > 0
+                ? ["Focus areas for this batch:", JSON.stringify(focusAreaPlan), ""]
+                : []),
+              "Already published posts:",
+              JSON.stringify(publishedPosts),
+              "",
+              "Current post queue:",
+              JSON.stringify(queuePosts),
+              "",
+              "Existing topic backlog:",
+              JSON.stringify(existingTopics),
+            ].join("\n"),
+          },
+        ],
+      },
+      {
+        timeout: 25_000,
+      },
+    );
+    const content = response.choices[0]?.message.content;
 
-      if (content) {
-        try {
-          const parsedIdeas = parseGeneratedTopics(content);
-
-          if (parsedIdeas.length > 0) {
-            ideas = [...parsedIdeas, ...fallbackIdeas];
-            source = parsedIdeas.length >= normalizedRequestedCount ? "openai" : "mixed";
-          }
-        } catch (error) {
-          console.error("Could not parse generated topic ideas.", error);
-        }
-      }
-    } catch (error) {
-      console.error("OpenAI topic generation failed. Falling back to local ideas.", error);
+    if (!content) {
+      throw new Error("OpenAI returned no topic ideas.");
     }
+
+    ideas = parseGeneratedTopics(content);
+    source = "openai";
+  } else if (seed) {
+    ideas = [
+      {
+        title: seed,
+        description: "",
+        focusArea: null,
+        noveltyScore: null,
+        audienceFit: null,
+        difficulty: null,
+      },
+    ];
+    source = "fallback";
+  } else {
+    ideas = fallbackTopics(publishedTitles, existingTitles);
+    source = "fallback";
   }
 
+  const focusAreaIdByName = new Map(focusAreas.map((area) => [area.name.toLowerCase(), area.id]));
+  const singleFocusAreaId = focusAreas.length === 1 ? focusAreas[0].id : null;
+  const focusAreaIdFor = (idea: GeneratedTopic) =>
+    (idea.focusArea && focusAreaIdByName.get(idea.focusArea.toLowerCase())) || singleFocusAreaId;
   const seen = new Set(
     [...publishedTitles, ...existingTitles].map((title) => title.toLowerCase()),
   );
   const uniqueIdeas = ideas
+    // With areas in play, drop ideas the model filed under an area that wasn't requested.
+    .filter((idea) => focusAreas.length === 0 || focusAreaIdFor(idea))
     .filter((idea) => !seen.has(idea.title.toLowerCase()))
     .filter((idea, index, allIdeas) => {
       const normalizedTitle = idea.title.toLowerCase();
@@ -536,6 +673,7 @@ export async function generateBacklogTopics(requestedCount = 20): Promise<TopicG
     data: uniqueIdeas.map((idea) => ({
       title: idea.title,
       description: idea.description || null,
+      focusAreaId: focusAreaIdFor(idea),
       noveltyScore: idea.noveltyScore,
       audienceFit: idea.audienceFit,
       difficulty: idea.difficulty,
@@ -584,6 +722,7 @@ export async function updateTopic(topicId: string, formData: FormData) {
       noveltyScore: numberValue(formData, "noveltyScore"),
       audienceFit: numberValue(formData, "audienceFit"),
       difficulty: numberValue(formData, "difficulty"),
+      focusAreaId: stringValue(formData, "focusAreaId") || null,
       status: stringValue(formData, "status") || "backlog",
     },
   });
@@ -604,10 +743,11 @@ export async function deleteTopic(topicId: string) {
   revalidatePath("/posts");
 }
 
-export async function selectAllBacklogTopics() {
+export async function selectAllBacklogTopics(focusAreaId?: string | null) {
   const result = await db.topic.updateMany({
     where: {
       status: "backlog",
+      ...(focusAreaId === "none" ? { focusAreaId: null } : focusAreaId ? { focusAreaId } : {}),
     },
     data: {
       status: "selected",
@@ -620,9 +760,16 @@ export async function selectAllBacklogTopics() {
   return result.count;
 }
 
-export async function selectAllBacklogTopicsFromForm() {
-  const count = await selectAllBacklogTopics();
-  redirect(`/topics?moved=${count}`);
+export async function selectAllBacklogTopicsFromForm(formData: FormData) {
+  const focusAreaId = stringValue(formData, "area");
+  const count = await selectAllBacklogTopics(focusAreaId);
+  const params = new URLSearchParams({ moved: String(count) });
+
+  if (focusAreaId) {
+    params.set("area", focusAreaId);
+  }
+
+  redirect(`/topics?${params.toString()}`);
 }
 
 export async function clearAllTopics() {
@@ -646,6 +793,12 @@ export async function createDraftPostRecordFromTopic(topicId: string) {
       id: topicId,
     },
     include: {
+      focusArea: {
+        select: {
+          name: true,
+          angle: true,
+        },
+      },
       posts: {
         select: {
           id: true,
@@ -733,6 +886,7 @@ export async function createDraftPostRecordFromTopic(topicId: string) {
             JSON.stringify({
               title: topic.title,
               description: topic.description,
+              focusArea: topic.focusArea,
               noveltyScore: topic.noveltyScore,
               audienceFit: topic.audienceFit,
               difficulty: topic.difficulty,
@@ -1079,4 +1233,29 @@ export async function createDraftsForAllSelectedTopics() {
   revalidatePath("/posts");
   revalidatePath("/topics");
   redirect(`/topics?drafted=${createdCount}`);
+}
+
+// Round-robin across focus areas so consecutive drafts don't all land in one subject.
+export function interleaveByFocusArea<T extends { focusAreaId: string | null }>(topics: T[]) {
+  const groups = new Map<string, T[]>();
+
+  for (const topic of topics) {
+    const key = topic.focusAreaId || "none";
+    groups.set(key, [...(groups.get(key) || []), topic]);
+  }
+
+  const queues = [...groups.values()];
+  const interleaved: T[] = [];
+
+  while (queues.some((queue) => queue.length > 0)) {
+    for (const queue of queues) {
+      const next = queue.shift();
+
+      if (next) {
+        interleaved.push(next);
+      }
+    }
+  }
+
+  return interleaved;
 }

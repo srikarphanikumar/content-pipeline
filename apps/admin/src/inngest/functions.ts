@@ -2,6 +2,7 @@ import { db } from "@content-pipeline/db";
 import {
   createDraftPostRecordFromTopic,
   generateNextBacklogTopics,
+  interleaveByFocusArea,
   prepareNextSelectedTopicForReview,
   preparePostAssetsForReview,
 } from "@/app/topics/pipeline";
@@ -224,8 +225,8 @@ export const dailyDraftBuffer = inngest.createFunction(
       };
     }
 
-    const selectedTopics = await step.run("Select topics for draft generation", async () =>
-      db.topic.findMany({
+    const selectedTopics = await step.run("Select topics for draft generation", async () => {
+      const candidates = await db.topic.findMany({
         where: {
           status: "selected",
           posts: {
@@ -243,13 +244,15 @@ export const dailyDraftBuffer = inngest.createFunction(
             updatedAt: "asc",
           },
         ],
-        take: draftsToCreate,
         select: {
           id: true,
           title: true,
+          focusAreaId: true,
         },
-      }),
-    );
+      });
+
+      return interleaveByFocusArea(candidates).slice(0, draftsToCreate);
+    });
 
     const createdDraftPostIds: string[] = [];
     const preparedPostIds: string[] = [];

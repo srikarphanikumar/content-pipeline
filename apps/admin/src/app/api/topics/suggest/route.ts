@@ -19,18 +19,32 @@ export async function POST(request: Request) {
 
   try {
     let count = 20;
+    let focusAreaIds: string[] | undefined;
+    let seed: string | undefined;
 
     try {
-      const body = (await request.json()) as { count?: unknown };
+      const body = (await request.json()) as {
+        count?: unknown;
+        focusAreaIds?: unknown;
+        seed?: unknown;
+      };
 
       if (typeof body.count === "number") {
         count = body.count;
+      }
+
+      if (Array.isArray(body.focusAreaIds)) {
+        focusAreaIds = body.focusAreaIds.filter((id): id is string => typeof id === "string");
+      }
+
+      if (typeof body.seed === "string") {
+        seed = body.seed;
       }
     } catch {
       // Empty request body is fine. The default batch size is used.
     }
 
-    const result = await generateBacklogTopics(count);
+    const result = await generateBacklogTopics(count, { focusAreaIds, seed });
 
     return NextResponse.json({
       ok: true,

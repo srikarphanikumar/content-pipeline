@@ -3,7 +3,9 @@ import { AdminShell, PrimaryLink } from "../components/AdminShell";
 import { CopyButton } from "../components/CopyButton";
 import { SubmitButton } from "../components/SubmitButton";
 import { CaptureTopicModal } from "./CaptureTopicModal";
+import { FocusAreasPanel } from "./FocusAreasPanel";
 import {
+  brainstormTopicsFromForm,
   createDraftPostFromTopic,
   createDraftsForAllSelectedTopics,
   createTopic,
@@ -28,8 +30,12 @@ const statusStyles: Record<string, string> = {
   done: "bg-zinc-700 text-zinc-300",
 };
 
+const ideaCounts = [5, 10, 20];
+
 type TopicsPageProps = {
   searchParams: Promise<{
+    area?: string;
+    area_error?: string;
     cleared?: string;
     drafted?: string;
     generated?: string;
@@ -40,11 +46,18 @@ type TopicsPageProps = {
 };
 
 export default async function TopicsPage({ searchParams }: TopicsPageProps) {
-  const { cleared, drafted, generated, moved, prepared, source } = await searchParams;
-  const [topics, publishedPostCount, queuePostCount] = await Promise.all([
+  const { area, area_error, cleared, drafted, generated, moved, prepared, source } =
+    await searchParams;
+  const [topics, publishedPostCount, queuePostCount, focusAreaRows] = await Promise.all([
     db.topic.findMany({
       orderBy: [{ updatedAt: "desc" }],
       include: {
+        focusArea: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         posts: {
           select: {
             id: true,
@@ -74,11 +87,56 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         },
       },
     }),
+    db.focusArea.findMany({
+      orderBy: [{ isPreset: "desc" }, { name: "asc" }],
+      include: {
+        _count: {
+          select: {
+            topics: {
+              where: {
+                status: {
+                  not: "done",
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
   ]);
-  const activeTopics = topics.filter((topic) => topic.status !== "done");
+  const focusAreas = focusAreaRows.map(({ _count, ...focusArea }) => ({
+    ...focusArea,
+    activeTopicCount: _count.topics,
+  }));
+  const activeFocusAreaKey = focusAreas
+    .filter((focusArea) => focusArea.active)
+    .map((focusArea) => focusArea.id)
+    .join(",");
+  const areaFilter =
+    area === "none" || focusAreas.some((focusArea) => focusArea.id === area) ? area : undefined;
+  const matchesArea = (topic: { focusAreaId: string | null }) =>
+    !areaFilter || (areaFilter === "none" ? !topic.focusAreaId : topic.focusAreaId === areaFilter);
+  const allActiveTopics = topics.filter((topic) => topic.status !== "done");
+  const unassignedCount = allActiveTopics.filter((topic) => !topic.focusAreaId).length;
+  const activeTopics = allActiveTopics.filter(matchesArea);
   const doneTopics = topics.filter((topic) => topic.status === "done");
-  const backlogCount = topics.filter((topic) => topic.status === "backlog").length;
+  const backlogCount = activeTopics.filter((topic) => topic.status === "backlog").length;
   const topicTitleText = activeTopics.map((topic) => topic.title).join("\n");
+  const areaChips = [
+    { href: "/topics", label: "All", count: allActiveTopics.length, selected: !areaFilter },
+    ...focusAreas.map((focusArea) => ({
+      href: `/topics?area=${focusArea.id}`,
+      label: focusArea.name,
+      count: focusArea.activeTopicCount,
+      selected: areaFilter === focusArea.id,
+    })),
+    {
+      href: "/topics?area=none",
+      label: "Unassigned",
+      count: unassignedCount,
+      selected: areaFilter === "none",
+    },
+  ];
 
   const counts = statuses.map((status) => ({
     status,
@@ -128,11 +186,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             Next-topic engine
           </p>
           <h2 className="mt-1 text-xl font-semibold text-white">
-            Build the backlog from what already shipped
+            Generate ideas in the areas you pick
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-orange-100/80">
-            This checks the published archive, the current queue, and existing
-            backlog titles, then fills toward a 50-topic idea bank in quick batches.
+            Ideas are checked against the published archive, the current queue, and existing
+            backlog titles so nothing repeats.
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
@@ -142,22 +200,120 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
               Queue posts: {queuePostCount}
             </span>
             <span className="rounded-md bg-black/30 px-2 py-1 text-orange-100">
-              Backlog topics: {activeTopics.length}
+              Backlog topics: {allActiveTopics.length}
             </span>
           </div>
         </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <form
+            action={generateNextBacklogTopicsFromForm}
+            className="grid gap-3 rounded-md border border-orange-400/20 bg-black/30 p-3"
+            // Remount when active areas change so the default-checked boxes follow them.
+            key={activeFocusAreaKey}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-300">
+              Generate from focus areas
+            </p>
+            {focusAreas.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {focusAreas.map((focusArea) => (
+                  <label
+                    className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-xs font-semibold text-zinc-200 has-[:checked]:border-orange-400 has-[:checked]:text-orange-200"
+                    key={focusArea.id}
+                  >
+                    <input
+                      className="accent-orange-500"
+                      defaultChecked={focusArea.active}
+                      name="focusAreaId"
+                      type="checkbox"
+                      value={focusArea.id}
+                    />
+                    {focusArea.name}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400">No focus areas yet. Ideas will be a general mix.</p>
+            )}
+            <p className="text-xs text-zinc-500">
+              Nothing checked uses every active area.
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                className="h-9 rounded-md border border-white/10 bg-black px-2 text-xs text-white"
+                defaultValue={10}
+                name="count"
+              >
+                {ideaCounts.map((count) => (
+                  <option key={count} value={count}>
+                    {count} ideas
+                  </option>
+                ))}
+              </select>
+              <SubmitButton
+                className="h-9 rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Generating..."
+              >
+                Generate ideas
+              </SubmitButton>
+            </div>
+          </form>
+
+          <form
+            action={brainstormTopicsFromForm}
+            className="grid gap-3 rounded-md border border-orange-400/20 bg-black/30 p-3"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-300">
+              Brainstorm from a topic
+            </p>
+            <input
+              className="h-9 rounded-md border border-white/10 bg-black px-3 text-sm text-white outline-none ring-orange-500/20 focus:ring-4"
+              maxLength={300}
+              name="seed"
+              placeholder="e.g. Temporal API in fintech dashboards"
+              required
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="h-9 rounded-md border border-white/10 bg-black px-2 text-xs text-white"
+                defaultValue=""
+                name="focusAreaId"
+              >
+                <option value="">No focus area</option>
+                {focusAreas.map((focusArea) => (
+                  <option key={focusArea.id} value={focusArea.id}>
+                    {focusArea.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="h-9 rounded-md border border-white/10 bg-black px-2 text-xs text-white"
+                defaultValue={5}
+                name="count"
+              >
+                {[3, 5, 8].map((count) => (
+                  <option key={count} value={count}>
+                    {count} angles
+                  </option>
+                ))}
+              </select>
+              <SubmitButton
+                className="h-9 rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Brainstorming..."
+              >
+                Brainstorm
+              </SubmitButton>
+            </div>
+          </form>
+        </div>
       </section>
 
+      <FocusAreasPanel areaError={area_error} focusAreas={focusAreas} />
+
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-[#141414] p-3">
-        <form action={generateNextBacklogTopicsFromForm}>
-          <SubmitButton
-            className="h-9 rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
-            pendingLabel="Adding..."
-          >
-            Add topic batch
-          </SubmitButton>
-        </form>
         <form action={selectAllBacklogTopicsFromForm}>
+          {areaFilter ? <input name="area" type="hidden" value={areaFilter} /> : null}
           <SubmitButton
             className="h-9 rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
             pendingLabel="Selecting..."
@@ -181,7 +337,12 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             Draft all selected
           </SubmitButton>
         </form>
-        <CaptureTopicModal action={createTopic} statuses={statuses} />
+        <CaptureTopicModal
+          action={createTopic}
+          defaultFocusAreaId={areaFilter && areaFilter !== "none" ? areaFilter : ""}
+          focusAreas={focusAreas}
+          statuses={statuses}
+        />
         <CopyButton
           className="h-9 rounded-md border border-white/10 px-3 text-xs font-semibold text-zinc-300 transition hover:border-orange-400 hover:text-orange-300"
           value={topicTitleText}
@@ -210,11 +371,30 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         ))}
       </div>
 
-      <div className="mt-4">
+      <nav className="mt-4 flex flex-wrap gap-2" aria-label="Filter topics by focus area">
+        {areaChips.map((chip) => (
+          <a
+            aria-current={chip.selected ? "page" : undefined}
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+              chip.selected
+                ? "bg-orange-500 text-black"
+                : "border border-white/10 text-zinc-300 hover:border-orange-400 hover:text-orange-300"
+            }`}
+            href={chip.href}
+            key={chip.href}
+          >
+            {chip.label} {chip.count}
+          </a>
+        ))}
+      </nav>
+
+      <div className="mt-3">
         <section className="overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
           {activeTopics.length === 0 ? (
             <div className="p-8 text-zinc-400">
-              No active backlog topics yet. Add ideas manually or generate the next set.
+              {areaFilter
+                ? "No active topics in this focus area yet. Generate or brainstorm some above."
+                : "No active backlog topics yet. Add ideas manually or generate the next set."}
             </div>
           ) : (
             <div className="divide-y divide-white/10">
@@ -230,6 +410,14 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                       >
                         {topic.status}
                       </span>
+                      {topic.focusArea ? (
+                        <a
+                          className="rounded-md border border-orange-400/30 px-2 py-1 text-xs font-semibold text-orange-200 hover:bg-orange-500/10"
+                          href={`/topics?area=${topic.focusArea.id}`}
+                        >
+                          {topic.focusArea.name}
+                        </a>
+                      ) : null}
                     </div>
                     {topic.description ? (
                       <p className="mt-1 max-w-5xl text-sm leading-6 text-zinc-400">
@@ -333,6 +521,21 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                             </label>
                           ))}
                         </div>
+                        <label className="grid gap-1 text-xs font-semibold text-zinc-400">
+                          Focus area
+                          <select
+                            className="h-10 rounded-md border border-white/10 bg-black px-3 text-sm text-white"
+                            name="focusAreaId"
+                            defaultValue={topic.focusAreaId || ""}
+                          >
+                            <option value="">None</option>
+                            {focusAreas.map((focusArea) => (
+                              <option key={focusArea.id} value={focusArea.id}>
+                                {focusArea.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         <label className="grid gap-1 text-xs font-semibold text-zinc-400">
                           Status
                           <select

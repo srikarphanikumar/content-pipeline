@@ -11,6 +11,7 @@ import { createDevToDraft, publishDevToArticle } from "@/lib/devto";
 import { publishLinkedInPost } from "@/lib/linkedin";
 import { sendPostToActiveSubscribers } from "@/lib/newsletter-send";
 import { generatePromotionCopy } from "@/lib/promotion";
+import { preparePostAssetsForReview } from "@/app/topics/pipeline";
 
 const statuses: PostStatus[] = [
   "IDEA",
@@ -317,6 +318,12 @@ export async function clearPipelineQueue() {
   revalidatePath("/");
   revalidatePath("/posts");
   revalidatePath("/topics");
+}
+
+// Same asset step the morning Inngest jobs run: cover image, dev.to draft, promotion copy.
+export async function preparePostForReview(postId: string) {
+  await requireAdmin();
+  await preparePostAssetsForReview(postId);
 }
 
 export async function generateCoverImageForPost(postId: string) {

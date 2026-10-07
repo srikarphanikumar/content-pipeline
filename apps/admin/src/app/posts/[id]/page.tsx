@@ -10,6 +10,7 @@ import {
   createDevToDraftForPost,
   deletePipelinePost,
   generateCoverImageForPost,
+  preparePostForReview,
   generatePromotionAssetsForPost,
   publishBlogCanonicalPost,
   publishBlueskyPromotionForPost,
@@ -55,6 +56,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const publishBlogAction = publishBlogCanonicalPost.bind(null, post.id);
   const scheduleTomorrowAction = schedulePostForTomorrow.bind(null, post.id);
   const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
+  const prepareForReviewAction = preparePostForReview.bind(null, post.id);
   const publishSocialsAction = publishSyndicationAndSocialsForPost.bind(null, post.id);
   const publishDevToAction = publishDevToSyndicationForPost.bind(null, post.id);
   const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
@@ -111,6 +113,10 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       linkedInPublication?.status === "PUBLISHED" &&
       blueskyPublication?.status === "PUBLISHED");
   const isBlogScheduled = blogPublication?.status === "SCHEDULED";
+  const needsReviewPrep =
+    !isProtectedImport &&
+    isPipelineQueuePost &&
+    (!post.coverImageUrl || !hasPromotionAssets || !devToPublication?.externalId);
   const routeSteps = [
     {
       label: "Canonical",
@@ -158,6 +164,16 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
       actions={
         <>
           <SecondaryLink href="/posts">All posts</SecondaryLink>
+          {needsReviewPrep ? (
+            <form action={prepareForReviewAction}>
+              <SubmitButton
+                className="inline-flex h-10 items-center rounded-md bg-sky-400 px-4 text-sm font-semibold text-black transition hover:bg-sky-300 disabled:cursor-wait disabled:opacity-70"
+                pendingLabel="Preparing image, dev.to, socials..."
+              >
+                Prepare for review
+              </SubmitButton>
+            </form>
+          ) : null}
           {!isProtectedImport && hasPromotionAssets && !isFullyPublished ? (
             <form action={approveAndPublishAction}>
               <SubmitButton

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "prisma generate --config ../../packages/db/prisma.config.ts && next build",
+    "build": "prisma generate --config ../../packages/db/prisma.config.ts && npm run migrate:production && next build",
+    "migrate:production": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy --config ../../packages/db/prisma.config.ts; else echo \"Skipping migrations outside Vercel production.\"; fi",
     "start": "next start",
     "lint": "eslint"
   },

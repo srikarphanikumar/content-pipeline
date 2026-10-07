@@ -555,7 +555,13 @@ Implemented:
   - existing topic backlog
 - Suggested ideas are created as `Topic` rows with `backlog` status.
 - OpenAI is used when `OPENAI_API_KEY` exists; deterministic fallback ideas are available otherwise.
-- Topic generation is biased toward uncommon AI + accessibility + frontend ideas.
+- Topic generation is driven by focus areas (`FocusArea` table, seeded with 7 presets: Accessibility, Browser internals, CSS, React architecture, Frontend performance, AI UX, Debugging).
+  - Custom areas can be added with an optional angle and a weight (1-3) that sets their share of a mixed batch.
+  - Active areas drive the daily Inngest top-up and are pre-checked in the Generate form; presets can be turned off but not deleted.
+  - `Brainstorm from a topic` turns a free-text seed into 3-8 angles, optionally filed under one area.
+  - Topics carry an optional focus area; `/topics?area=<id|none>` filters the list and scopes `Move all to selected`.
+  - Canned fallback ideas are only used when `OPENAI_API_KEY` is missing; OpenAI failures surface as errors instead of padding the batch.
+  - The draft buffer rotates across focus areas, and draft prompts include the topic's focus area and angle.
 - Topics can be cleared in bulk from the Ideas page.
 - Backlog topics can be bulk-moved to `selected`.
 - A topic can now create a linked draft post and redirect into the post workspace.

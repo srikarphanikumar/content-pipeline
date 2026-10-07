@@ -93,6 +93,24 @@ model Topic {
   authorId String?
   author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
   posts    Post[]
+
+  focusAreaId String?
+  focusArea   FocusArea? @relation(fields: [focusAreaId], references: [id], onDelete: SetNull)
+
+  @@index([focusAreaId, status])
+}
+
+model FocusArea {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  angle     String?
+  active    Boolean  @default(true)
+  weight    Int      @default(1)
+  isPreset  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topics Topic[]
 }
 
 model Post {

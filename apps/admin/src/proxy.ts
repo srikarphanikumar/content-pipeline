@@ -1,8 +1,45 @@
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/server";
 
-export default auth.middleware({
+const neonAuthMiddleware = auth.middleware({
   loginUrl: "/auth/sign-in",
 });
+
+function isRedirect(response: Response) {
+  return response.status >= 300 && response.status < 400;
+}
+
+export default async function proxy(request: NextRequest) {
+  if (request.method === "GET" || request.method === "HEAD") {
+    return neonAuthMiddleware(request);
+  }
+
+  // Neon's middleware forwards the incoming method and body to its GET-only get-session
+  // endpoint, so every POST (including server actions) looks signed out, gets redirected,
+  // and the replayed action 404s on /auth/sign-in. Check the session with a body-less GET
+  // instead and let the original request through untouched.
+  const sessionCheck = await neonAuthMiddleware(
+    new NextRequest(request.url, { headers: request.headers, method: "GET" }),
+  );
+
+  if (isRedirect(sessionCheck)) {
+    // Server actions call requireAdmin() themselves, which redirects to sign-in in a way the
+    // action client understands. Anything else gets a plain 401.
+    if (request.headers.has("next-action") && !request.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.next();
+    }
+
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const response = NextResponse.next();
+
+  for (const cookie of sessionCheck.headers.getSetCookie()) {
+    response.headers.append("Set-Cookie", cookie);
+  }
+
+  return response;
+}
 
 export const config = {
   matcher: [

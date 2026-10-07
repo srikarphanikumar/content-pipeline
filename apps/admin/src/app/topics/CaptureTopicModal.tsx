@@ -9,10 +9,17 @@ const labelClass = "grid gap-1.5 text-xs font-semibold text-zinc-400";
 
 type CaptureTopicModalProps = {
   action: (formData: FormData) => void | Promise<void>;
+  defaultFocusAreaId: string;
+  focusAreas: Array<{ id: string; name: string }>;
   statuses: string[];
 };
 
-export function CaptureTopicModal({ action, statuses }: CaptureTopicModalProps) {
+export function CaptureTopicModal({
+  action,
+  defaultFocusAreaId,
+  focusAreas,
+  statuses,
+}: CaptureTopicModalProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -76,6 +83,17 @@ export function CaptureTopicModal({ action, statuses }: CaptureTopicModalProps) 
                   </label>
                 ))}
               </div>
+              <label className={labelClass}>
+                Focus area
+                <select className={inputClass} name="focusAreaId" defaultValue={defaultFocusAreaId}>
+                  <option value="">None</option>
+                  {focusAreas.map((focusArea) => (
+                    <option key={focusArea.id} value={focusArea.id}>
+                      {focusArea.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className={labelClass}>
                 Status
                 <select className={inputClass} name="status" defaultValue="backlog">

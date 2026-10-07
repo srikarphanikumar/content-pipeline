@@ -1,5 +1,6 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidatePath } from "next/cache";
 import { db } from "@content-pipeline/db";
 import {
@@ -33,6 +34,8 @@ async function recordDelivery(input: Parameters<typeof db.notificationDelivery.c
 }
 
 export async function sendTestWhatsAppNotification() {
+  await requireAdmin();
+
   envSummary();
 
   const notificationDate = new Intl.DateTimeFormat("en-US", {

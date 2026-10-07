@@ -1,5 +1,6 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { collectPlatformMetricSnapshots } from "@/lib/analytics";
@@ -16,6 +17,8 @@ const manualEvents = {
 type ManualEventKey = keyof typeof manualEvents;
 
 export async function collectAnalyticsNow() {
+  await requireAdmin();
+
   const result = await collectPlatformMetricSnapshots();
 
   revalidatePath("/analytics");
@@ -27,6 +30,8 @@ export async function collectAnalyticsNow() {
 }
 
 export async function triggerInngestFunction(key: ManualEventKey) {
+  await requireAdmin();
+
   const eventName = manualEvents[key];
 
   await inngest.send({

@@ -4,7 +4,7 @@ import {
   generateNextBacklogTopics,
   prepareNextSelectedTopicForReview,
   preparePostAssetsForReview,
-} from "@/app/topics/actions";
+} from "@/app/topics/pipeline";
 import { collectPlatformMetricSnapshots, latestPlatformStatsLines } from "@/lib/analytics";
 import { pollTwilioMessageStatus, sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { inngest } from "./client";

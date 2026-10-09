@@ -17,10 +17,11 @@ import {
   updateTopic,
   updateTopicStatus,
 } from "./actions";
+import { inactiveTopicStatuses, isActiveTopicStatus } from "@/lib/topic-status";
 
 export const dynamic = "force-dynamic";
 
-const statuses = ["backlog", "selected", "drafting", "ready", "done"];
+const statuses = ["backlog", "selected", "drafting", "ready", "done", "rejected"];
 
 const statusStyles: Record<string, string> = {
   backlog: "bg-white/10 text-zinc-300",
@@ -95,7 +96,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             topics: {
               where: {
                 status: {
-                  not: "done",
+                  notIn: inactiveTopicStatuses,
                 },
               },
             },
@@ -116,10 +117,10 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     area === "none" || focusAreas.some((focusArea) => focusArea.id === area) ? area : undefined;
   const matchesArea = (topic: { focusAreaId: string | null }) =>
     !areaFilter || (areaFilter === "none" ? !topic.focusAreaId : topic.focusAreaId === areaFilter);
-  const allActiveTopics = topics.filter((topic) => topic.status !== "done");
+  const allActiveTopics = topics.filter((topic) => isActiveTopicStatus(topic.status));
   const unassignedCount = allActiveTopics.filter((topic) => !topic.focusAreaId).length;
   const activeTopics = allActiveTopics.filter(matchesArea);
-  const doneTopics = topics.filter((topic) => topic.status === "done");
+  const doneTopics = topics.filter((topic) => !isActiveTopicStatus(topic.status));
   const backlogCount = activeTopics.filter((topic) => topic.status === "backlog").length;
   const topicTitleText = activeTopics.map((topic) => topic.title).join("\n");
   const areaChips = [
@@ -580,7 +581,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             Completed ideas
           </p>
           <p className="mt-2 text-sm text-zinc-400">
-            Done topics stay out of the active backlog.
+            Done and rejected topics stay out of the active backlog.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {doneTopics.slice(0, 24).map((topic) => (
@@ -589,6 +590,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
                 key={topic.id}
               >
                 {topic.title}
+                {topic.status === "rejected" ? " · rejected" : ""}
               </span>
             ))}
           </div>

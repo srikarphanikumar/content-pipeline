@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@content-pipeline/db";
 import { generateNextBacklogTopics } from "@/app/topics/pipeline";
+import { inactiveTopicStatuses } from "@/lib/topic-status";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
     db.topic.count({
       where: {
         status: {
-          not: "done",
+          notIn: inactiveTopicStatuses,
         },
       },
     }),
@@ -61,7 +62,7 @@ export async function GET(request: Request) {
     ? await db.topic.count({
         where: {
           status: {
-            not: "done",
+            notIn: inactiveTopicStatuses,
           },
         },
       })

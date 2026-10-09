@@ -1,101 +1,50 @@
 "use server";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { revalidatePath } from "next/cache";
-import { db } from "@content-pipeline/db";
-import {
-  pollTwilioMessageStatus,
-  sendWhatsAppTemplate,
-} from "@/lib/whatsapp";
+import { redirect } from "next/navigation";
+import { botHelpText, pipelineBaseUrl, sendBotMessage } from "@/lib/pipeline-bot";
+import { setTelegramCommands, setTelegramWebhook } from "@/lib/telegram";
 
-function envSummary() {
-  const required = [
-    "TWILIO_ACCOUNT_SID",
-    "TWILIO_AUTH_TOKEN",
-    "TWILIO_MESSAGING_SERVICE_SID",
-    "TWILIO_MORNING_TEMPLATE_SID",
-    "WHATSAPP_TO",
-  ];
-  const missing = required.filter((key) => !process.env[key]);
+function settingsRedirect(telegram: string, error?: unknown) {
+  const params = new URLSearchParams({ telegram });
 
-  if (missing.length > 0) {
-    throw new Error(`Missing WhatsApp env vars: ${missing.join(", ")}`);
+  if (error) {
+    params.set("detail", error instanceof Error ? error.message : "Unknown error.");
   }
+
+  redirect(`/settings?${params.toString()}`);
 }
 
-async function recordDelivery(input: Parameters<typeof db.notificationDelivery.create>[0]["data"]) {
-  try {
-    await db.notificationDelivery.create({
-      data: input,
-    });
-  } catch (error) {
-    console.error("Failed to record WhatsApp delivery", error);
-  }
-}
-
-export async function sendTestWhatsAppNotification() {
+export async function sendTestTelegramMessage() {
   await requireAdmin();
 
-  envSummary();
-
-  const notificationDate = new Intl.DateTimeFormat("en-US", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "America/New_York",
-  }).format(new Date());
-  const detail =
-    "Manual admin test from the Under The Hood pipeline. If this arrives, production WhatsApp template delivery is working.";
-  const body = `Under The Hood morning summary for ${notificationDate}:\n\n${detail}\n\nReply STOP to opt out.`;
-
   try {
-    const result = await sendWhatsAppTemplate(
-      process.env.TWILIO_MORNING_TEMPLATE_SID,
-      {
-        "1": notificationDate,
-        "2": detail,
-      },
-      body,
-    );
-
-    if (!result.sent) {
-      await recordDelivery({
-        bodyPreview: body,
-        channel: "WHATSAPP",
-        errorMessage: result.reason,
-        kind: "TEST",
-        recipient: process.env.WHATSAPP_TO as string,
-        status: "not_sent",
-        templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-      });
-      revalidatePath("/settings");
-      return;
-    }
-
-    const status = await pollTwilioMessageStatus(result.sid);
-
-    await recordDelivery({
-      bodyPreview: body,
-      channel: "WHATSAPP",
-      errorCode: status.errorCode,
-      errorMessage: status.errorMessage,
+    await sendBotMessage({
       kind: "TEST",
-      messageSid: result.sid,
-      recipient: process.env.WHATSAPP_TO as string,
-      status: status.status,
-      templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
+      text: `✅ <b>Test from the pipeline settings page.</b>\n\n${botHelpText}`,
     });
   } catch (error) {
-    await recordDelivery({
-      bodyPreview: body,
-      channel: "WHATSAPP",
-      errorMessage: error instanceof Error ? error.message : "Unknown WhatsApp test error",
-      kind: "TEST",
-      recipient: process.env.WHATSAPP_TO || "unknown",
-      status: "failed",
-      templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-    });
-    throw error;
+    settingsRedirect("test-failed", error);
   }
 
-  revalidatePath("/settings");
+  settingsRedirect("test-sent");
+}
+
+// A bot has exactly one webhook. Registering from a preview deployment would silently move
+// the bot off production, so this only runs on production (or locally, for a tunnel).
+export async function registerTelegramWebhook() {
+  await requireAdmin();
+
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production") {
+    settingsRedirect("webhook-preview");
+  }
+
+  try {
+    await setTelegramWebhook(`${pipelineBaseUrl()}/api/telegram/webhook`);
+    await setTelegramCommands();
+  } catch (error) {
+    settingsRedirect("webhook-failed", error);
+  }
+
+  settingsRedirect("webhook-registered");
 }

@@ -69,7 +69,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     totalPublications,
     failedPublications,
     metricSnapshots30d,
-    whatsappDeliveries30d,
+    telegramMessages30d,
     linkedInConnection,
     platformCounts,
     recentSnapshots,
@@ -103,7 +103,7 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
     }),
     db.notificationDelivery.count({
       where: {
-        channel: "WHATSAPP",
+        channel: "TELEGRAM",
         createdAt: {
           gte: since,
         },
@@ -207,9 +207,9 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
       value: metricSnapshots30d.toString(),
     },
     {
-      label: "WhatsApp sends",
+      label: "Telegram messages",
       tone: "last 30 days",
-      value: whatsappDeliveries30d.toString(),
+      value: telegramMessages30d.toString(),
     },
     {
       label: "Platform failures",

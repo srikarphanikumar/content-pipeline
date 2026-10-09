@@ -7,23 +7,16 @@ import {
   preparePostAssetsForReview,
 } from "@/app/topics/pipeline";
 import { collectPlatformMetricSnapshots, latestPlatformStatsLines } from "@/lib/analytics";
-import { pollTwilioMessageStatus, sendWhatsAppTemplate } from "@/lib/whatsapp";
+import { sendBotMessage, sendNextForReview } from "@/lib/pipeline-bot";
+import { approvableStatuses } from "@/lib/post-workflow";
+import { escapeHtml } from "@/lib/telegram";
+import { inactiveTopicStatuses } from "@/lib/topic-status";
+import { botFunctions } from "./bot-functions";
 import { inngest } from "./client";
 
 const activeTopicTarget = 50;
 const draftReadyTarget = 20;
 const maxDraftsPerRun = 2;
-
-function adminPostUrl(postId: string) {
-  return `https://pipeline.mspk.me/posts/${postId}`;
-}
-
-function formatPostLine(post: {
-  id: string;
-  title: string;
-}) {
-  return `- ${post.title}\n  ${adminPostUrl(post.id)}`;
-}
 
 function truncateLine(value: string, maxLength = 120) {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -62,44 +55,6 @@ function formatStatusCounts(counts: {
   return parts.length > 0 ? parts.join(", ") : "No activity yet";
 }
 
-function assertDelivered(status: {
-  errorCode: string | null;
-  errorMessage: string | null;
-  status: string;
-}) {
-  if (["failed", "undelivered"].includes(status.status)) {
-    throw new Error(
-      `WhatsApp delivery ${status.status}${
-        status.errorCode ? ` (${status.errorCode})` : ""
-      }: ${status.errorMessage || "No Twilio error message"}`,
-    );
-  }
-}
-
-async function recordWhatsAppDelivery(input: {
-  bodyPreview: string;
-  errorCode?: string | null;
-  errorMessage?: string | null;
-  kind: "MORNING_SUMMARY" | "NIGHTLY_STATS" | "TEST";
-  messageSid?: string | null;
-  status: string;
-  templateSid?: string;
-}) {
-  await db.notificationDelivery.create({
-    data: {
-      bodyPreview: input.bodyPreview,
-      channel: "WHATSAPP",
-      errorCode: input.errorCode || null,
-      errorMessage: input.errorMessage || null,
-      kind: input.kind,
-      messageSid: input.messageSid || null,
-      recipient: process.env.WHATSAPP_TO || "unknown",
-      status: input.status,
-      templateSid: input.templateSid,
-    },
-  });
-}
-
 export const dailyPlanning = inngest.createFunction(
   {
     id: "daily-content-planning",
@@ -114,7 +69,7 @@ export const dailyPlanning = inngest.createFunction(
         db.topic.count({
           where: {
             status: {
-              not: "done",
+              notIn: inactiveTopicStatuses,
             },
           },
         }),
@@ -151,7 +106,7 @@ export const dailyPlanning = inngest.createFunction(
       const activeTopicCount = await db.topic.count({
         where: {
           status: {
-            not: "done",
+            notIn: inactiveTopicStatuses,
           },
         },
       });
@@ -352,6 +307,8 @@ export const weekdayMorningApprovalPrep = inngest.createFunction(
   },
 );
 
+// The morning message is the approval card itself: the next post to approve (or a topic to
+// draft when the buffer is empty), with a short pipeline status underneath.
 export const morningPublishingSummary = inngest.createFunction(
   {
     id: "morning-publishing-summary",
@@ -361,176 +318,38 @@ export const morningPublishingSummary = inngest.createFunction(
     ],
   },
   async ({ step }) => {
-    const summary = await step.run("Build morning publishing summary", async () => {
-      const [readyPosts, draftingPosts, recentPublications, failedPublications] =
-        await Promise.all([
-          db.post.findMany({
-            where: {
-              status: {
-                in: ["DRAFT_READY", "READY_TO_PUBLISH"],
-              },
+    const footer = await step.run("Build pipeline status line", async () => {
+      const [readyCount, draftingCount, failedCount] = await Promise.all([
+        db.post.count({
+          where: {
+            sourcePlatform: null,
+            status: {
+              in: approvableStatuses,
             },
-            orderBy: [{ updatedAt: "asc" }],
-            take: 3,
-            select: {
-              id: true,
-              title: true,
-            },
-          }),
-          db.post.findMany({
-            where: {
-              status: "DRAFTING",
-            },
-            orderBy: [{ updatedAt: "desc" }],
-            take: 5,
-            select: {
-              id: true,
-              title: true,
-            },
-          }),
-          db.platformPublication.findMany({
-            where: {
-              updatedAt: {
-                gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-              },
-            },
-            include: {
-              post: {
-                select: {
-                  title: true,
-                },
-              },
-            },
-            orderBy: [{ updatedAt: "desc" }],
-            take: 10,
-          }),
-          db.platformPublication.findMany({
-            where: {
-              status: "FAILED",
-            },
-            include: {
-              post: {
-                select: {
-                  title: true,
-                },
-              },
-            },
-            orderBy: [{ updatedAt: "desc" }],
-            take: 5,
-          }),
-        ]);
+          },
+        }),
+        db.post.count({
+          where: {
+            status: "DRAFTING",
+          },
+        }),
+        db.platformPublication.count({
+          where: {
+            status: "FAILED",
+          },
+        }),
+      ]);
 
-      return {
-        draftingPosts,
-        failedPublications,
-        readyPosts,
-        recentPublications,
-      };
+      return [
+        notificationDate(),
+        `Buffer: ${pluralize(readyCount, "ready draft")}, ${draftingCount} in progress`,
+        `Failures: ${failedCount > 0 ? `${pluralize(failedCount, "platform action")} to review` : "none"}`,
+      ].join("\n");
     });
 
-    const readyText =
-      summary.readyPosts.length > 0
-        ? summary.readyPosts.map(formatPostLine).join("\n")
-        : "- No posts ready for approval.";
-    const draftingText =
-      summary.draftingPosts.length > 0
-        ? summary.draftingPosts.map(formatPostLine).join("\n")
-        : "- No drafts waiting for review.";
-    const recentText =
-      summary.recentPublications.length > 0
-        ? summary.recentPublications
-            .map(
-              (publication) =>
-                `- ${publication.platform}: ${publication.status} · ${publication.post.title}`,
-            )
-            .join("\n")
-        : "- No platform updates in the last 24h.";
-    const failuresText =
-      summary.failedPublications.length > 0
-        ? summary.failedPublications
-            .map(
-              (publication) =>
-                `- ${publication.platform}: ${publication.post.title}\n  ${publication.errorMessage || "No error message"}`,
-            )
-            .join("\n")
-        : "- No failed platform actions.";
-    const fullDetail = [
-      "Morning pipeline update",
-      "",
-      "Ready for approval:",
-      readyText,
-      "",
-      "Drafts needing review:",
-      draftingText,
-      "",
-      "Last 24h platform activity:",
-      recentText,
-      "",
-      "Failures:",
-      failuresText,
-    ].join("\n");
-    const approvalSummary = summary.readyPosts[0]
-      ? `${truncateLine(summary.readyPosts[0].title, 120)} - ${adminPostUrl(summary.readyPosts[0].id)}`
-      : "None waiting. Clear runway.";
-    const draftBufferSummary = `${pluralize(
-      summary.readyPosts.length,
-      "ready draft",
-    )}, ${pluralize(summary.draftingPosts.length, "draft")} in progress`;
-    const failureSummary =
-      summary.failedPublications.length > 0
-        ? `${pluralize(summary.failedPublications.length, "failure")} needs review`
-        : "None. Pipeline is clean.";
-    const body = [
-      `Pipeline status for ${notificationDate()}.`,
-      "",
-      `Post awaiting approval: ${approvalSummary}`,
-      `Draft buffer: ${draftBufferSummary}`,
-      `Failed jobs: ${failureSummary}`,
-      "",
-      "Reply STOP to opt out.",
-    ].join("\n");
-
-    return step.run("Send WhatsApp morning summary", async () => {
-      const result = await sendWhatsAppTemplate(
-        process.env.TWILIO_MORNING_TEMPLATE_SID,
-        {
-          "1": notificationDate(),
-          "2": approvalSummary,
-          "3": draftBufferSummary,
-          "4": failureSummary,
-        },
-        body,
-      );
-
-      if (!result.sent) {
-        await recordWhatsAppDelivery({
-          bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
-          errorMessage: result.reason,
-          kind: "MORNING_SUMMARY",
-          status: "not_sent",
-          templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-        });
-        throw new Error(result.reason);
-      }
-
-      const status = await pollTwilioMessageStatus(result.sid);
-
-      await recordWhatsAppDelivery({
-        bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
-        errorCode: status.errorCode,
-        errorMessage: status.errorMessage,
-        kind: "MORNING_SUMMARY",
-        messageSid: result.sid,
-        status: status.status,
-        templateSid: process.env.TWILIO_MORNING_TEMPLATE_SID,
-      });
-      assertDelivered(status);
-
-      return {
-        ...result,
-        deliveryStatus: status.status,
-      };
-    });
+    return step.run("Send morning approval card", async () =>
+      sendNextForReview({ footer, kind: "MORNING_SUMMARY" }),
+    );
   },
 );
 
@@ -576,7 +395,7 @@ export const nightlyStatsAndTopics = inngest.createFunction(
         db.topic.count({
           where: {
             status: {
-              not: "done",
+              notIn: inactiveTopicStatuses,
             },
           },
         }),
@@ -639,72 +458,28 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       topicState.selectedTopics.length > 0
         ? topicState.selectedTopics.map((topic) => `- ${topic.title}`).join("\n")
         : "- No selected topics ready for drafting.";
-    const fullDetail = [
-      "Nightly platform stats",
+    const text = [
+      `📊 <b>Platform report · ${escapeHtml(notificationDate())}</b>`,
       "",
-      statsLines.join("\n"),
+      `Blog: ${escapeHtml(summaryForPlatform("BLOG"))}`,
+      `dev.to: ${escapeHtml(summaryForPlatform("DEVTO"))}`,
+      `LinkedIn: ${escapeHtml(summaryForPlatform("LINKEDIN"))}`,
+      `Bluesky: ${escapeHtml(summaryForPlatform("BLUESKY"))}`,
+      `Failed jobs: ${escapeHtml(nightlyFailureSummary)}`,
       "",
-      "Topics for tomorrow:",
-      selectedTopicText,
+      "<b>Latest stats</b>",
+      escapeHtml(statsLines.join("\n") || "No stats collected yet."),
+      "",
+      "<b>Topics for tomorrow</b>",
+      escapeHtml(selectedTopicText),
       "",
       `Active topic backlog: ${topicState.activeTopicCount}/${activeTopicTarget}`,
       `Metrics stored: ${collectionResult.metricsStored}`,
     ].join("\n");
-    const body = [
-      `Pipeline platform report for ${notificationDate()}.`,
-      "",
-      `Blog: ${summaryForPlatform("BLOG")}`,
-      `dev.to: ${summaryForPlatform("DEVTO")}`,
-      `LinkedIn: ${summaryForPlatform("LINKEDIN")}`,
-      `Bluesky: ${summaryForPlatform("BLUESKY")}`,
-      `Failed jobs: ${nightlyFailureSummary}`,
-      "",
-      "Reply STOP to opt out.",
-    ].join("\n");
 
-    return step.run("Send WhatsApp nightly stats", async () => {
-      const result = await sendWhatsAppTemplate(
-        process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
-        {
-          "1": notificationDate(),
-          "2": summaryForPlatform("BLOG"),
-          "3": summaryForPlatform("DEVTO"),
-          "4": summaryForPlatform("LINKEDIN"),
-          "5": summaryForPlatform("BLUESKY"),
-          "6": nightlyFailureSummary,
-        },
-        body,
-      );
-
-      if (!result.sent) {
-        await recordWhatsAppDelivery({
-          bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
-          errorMessage: result.reason,
-          kind: "NIGHTLY_STATS",
-          status: "not_sent",
-          templateSid: process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
-        });
-        throw new Error(result.reason);
-      }
-
-      const status = await pollTwilioMessageStatus(result.sid);
-
-      await recordWhatsAppDelivery({
-        bodyPreview: `Template body:\n${body}\n\nFull detail:\n${fullDetail}`,
-        errorCode: status.errorCode,
-        errorMessage: status.errorMessage,
-        kind: "NIGHTLY_STATS",
-        messageSid: result.sid,
-        status: status.status,
-        templateSid: process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
-      });
-      assertDelivered(status);
-
-      return {
-        ...result,
-        deliveryStatus: status.status,
-      };
-    });
+    return step.run("Send Telegram nightly stats", async () => ({
+      messageId: await sendBotMessage({ kind: "NIGHTLY_STATS", text }),
+    }));
   },
 );
 
@@ -714,4 +489,5 @@ export const functions = [
   weekdayMorningApprovalPrep,
   morningPublishingSummary,
   nightlyStatsAndTopics,
+  ...botFunctions,
 ];

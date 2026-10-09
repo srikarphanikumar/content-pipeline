@@ -50,8 +50,9 @@ export const config = {
      * - /api/inngest (Inngest signs its own requests)
      * - /api/cron/* (guarded by CRON_SECRET)
      * - /api/oauth/linkedin/callback (LinkedIn redirect; validated by OAuth state cookie)
+     * - /api/telegram/webhook (Telegram bot; validated by the webhook secret header and chat id)
      * - Next.js internals and static files
      */
-    "/((?!auth/|api/auth/|api/inngest|api/cron/|api/oauth/linkedin/callback|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!auth/|api/auth/|api/inngest|api/cron/|api/oauth/linkedin/callback|api/telegram/webhook|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

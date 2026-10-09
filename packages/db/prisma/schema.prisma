@@ -47,13 +47,17 @@ enum SubscriberStatus {
 }
 
 enum NotificationChannel {
-  WHATSAPP
+  TELEGRAM
 }
 
 enum NotificationKind {
   MORNING_SUMMARY
   NIGHTLY_STATS
   TEST
+  APPROVAL_REQUEST
+  TOPIC_OFFER
+  IMPROVE_PROMPT
+  BOT_REPLY
 }
 
 enum PromotionAssetType {
@@ -225,17 +229,21 @@ model NotificationDelivery {
   channel      NotificationChannel
   kind         NotificationKind
   recipient    String
-  templateSid  String?
-  messageSid   String?
+  messageId    String?
   status       String
   errorCode    String?
   errorMessage String?             @db.Text
   bodyPreview  String?             @db.Text
+  // Which post/topic a bot message is about, so button taps and replies can find it again.
+  // Plain ids rather than relations: rejecting a post deletes it, and the log should survive.
+  postId       String?
+  topicId      String?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
   @@index([channel, createdAt])
-  @@index([messageSid])
+  @@index([recipient, messageId])
+  @@index([postId])
 }
 
 model EmailDelivery {

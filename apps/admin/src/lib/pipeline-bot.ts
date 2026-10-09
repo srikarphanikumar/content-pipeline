@@ -9,7 +9,7 @@ import {
   type InlineKeyboard,
 } from "@/lib/telegram";
 
-export type BotAction = "approve" | "improve" | "reject" | "draft" | "skip";
+export type BotAction = "approve" | "improve" | "reject" | "draft" | "skip" | "retry";
 
 // Telegram caps callback_data at 64 bytes; a one-letter code plus a cuid fits comfortably.
 const actionCodes: Record<BotAction, string> = {
@@ -17,6 +17,7 @@ const actionCodes: Record<BotAction, string> = {
   draft: "d",
   improve: "i",
   reject: "r",
+  retry: "f",
   skip: "s",
 };
 
@@ -51,6 +52,7 @@ export const botHelpText = [
   "• <b>Reject</b> drops the draft and its topic, then shows the next one.",
   "",
   "/next shows the next post waiting for approval.",
+  "/idea &lt;topic&gt; adds a topic to draft. Extra lines become its description.",
 ].join("\n");
 
 export async function recordTelegramDelivery(input: {
@@ -118,6 +120,11 @@ export async function sendBotMessage(input: {
   }
 }
 
+// Escapes for Telegram HTML, then renders `inline code` from titles and summaries as <code>.
+function formatInline(value: string) {
+  return escapeHtml(value).replace(/`([^`\n]+)`/g, "<code>$1</code>");
+}
+
 function plainSummary(markdown: string) {
   const firstParagraphs = markdown
     .replace(/```[\s\S]*?```/g, " ")
@@ -130,7 +137,7 @@ function plainSummary(markdown: string) {
   return firstParagraphs
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/[*_`>]/g, "")
+    .replace(/[*_>]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -151,10 +158,10 @@ export function approvalCardText(post: CardPost, options: { footer?: string; hea
   return [
     `📝 <b>${escapeHtml(options.heading || "Up for approval")}</b>`,
     "",
-    `<b>${escapeHtml(truncateText(post.title, 250))}</b>`,
-    subtitle ? `<i>${escapeHtml(subtitle)}</i>` : null,
+    `<b>${formatInline(truncateText(post.title, 250))}</b>`,
+    subtitle ? `<i>${formatInline(subtitle)}</i>` : null,
     "",
-    escapeHtml(summary),
+    formatInline(summary),
     "",
     `<a href="${adminPostUrl(post.id)}">Open in pipeline</a>`,
     options.footer ? `\n${escapeHtml(options.footer)}` : null,
@@ -184,8 +191,8 @@ export function topicOfferText(topic: OfferTopic, options: { footer?: string } =
   return [
     "💡 <b>No draft is ready. Next topic to draft:</b>",
     "",
-    `<b>${escapeHtml(truncateText(topic.title, 250))}</b>`,
-    topic.description ? escapeHtml(truncateText(topic.description, 400)) : null,
+    `<b>${formatInline(truncateText(topic.title, 250))}</b>`,
+    topic.description ? formatInline(truncateText(topic.description, 400)) : null,
     topic.focusArea ? `\nFocus area: ${escapeHtml(topic.focusArea.name)}` : null,
     "",
     "Drafting takes a minute or two.",
@@ -202,6 +209,10 @@ export function topicOfferKeyboard(topicId: string): InlineKeyboard {
       { callback_data: encodeCallback("skip", topicId), text: "⏭ Skip" },
     ],
   ];
+}
+
+export function draftNowKeyboard(topicId: string): InlineKeyboard {
+  return [[{ callback_data: encodeCallback("draft", topicId), text: "✍️ Draft now" }]];
 }
 
 const cardPostSelect = {
@@ -391,14 +402,84 @@ const platformLabels: Record<string, string> = {
   LINKEDIN: "LinkedIn",
 };
 
-export function publicationResultLines(
-  publications: Array<{
-    errorMessage: string | null;
-    externalUrl: string | null;
-    platform: string;
-    status: string;
-  }>,
-) {
+type PublicationResult = {
+  errorMessage: string | null;
+  externalUrl: string | null;
+  platform: string;
+  status: string;
+};
+
+export function publishResultCard(
+  post: { id: string; title: string },
+  results: PublicationResult[],
+  heading: string,
+): { keyboard?: InlineKeyboard; text: string } {
+  const failed = ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"].filter((platform) =>
+    results.some((result) => result.platform === platform && result.status === "FAILED"),
+  );
+
+  return {
+    // One button retries every failed platform; publishing that already worked is left alone.
+    keyboard: failed.length
+      ? [
+          [
+            {
+              callback_data: encodeCallback("retry", post.id),
+              text: `🔁 Retry ${failed.map((platform) => platformLabels[platform]).join(", ")}`,
+            },
+          ],
+        ]
+      : undefined,
+    text: [
+      heading,
+      "",
+      `<b>${formatInline(post.title)}</b>`,
+      "",
+      ...publicationResultLines(results),
+      "",
+      `<a href="${adminPostUrl(post.id)}">Open in pipeline</a>`,
+    ].join("\n"),
+  };
+}
+
+// Credentials that fail without warning when they lapse. Only LinkedIn expires today:
+// dev.to keys and Bluesky app passwords do not.
+export async function credentialWarnings(options: { withinDays: number }) {
+  const linkedIn = await db.platformConnection.findUnique({
+    where: {
+      platform: "LINKEDIN",
+    },
+    select: {
+      expiresAt: true,
+    },
+  });
+
+  if (!linkedIn) {
+    return ["LinkedIn is not connected. Connect it in Settings or LinkedIn posts will fail."];
+  }
+
+  if (!linkedIn.expiresAt) {
+    return [];
+  }
+
+  const daysLeft = Math.floor((linkedIn.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+
+  if (daysLeft < 0) {
+    return ["LinkedIn token has expired. Reconnect it in Settings before approving."];
+  }
+
+  if (daysLeft <= options.withinDays) {
+    return [
+      daysLeft === 0
+        ? "LinkedIn token expires today. Reconnect it in Settings."
+        : `LinkedIn token expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Reconnect it in Settings.`,
+    ];
+  }
+
+  return [];
+}
+
+export function publicationResultLines(publications: PublicationResult[]) {
   return ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"].map((platform) => {
     const publication = publications.find((item) => item.platform === platform);
     const label = platformLabels[platform];

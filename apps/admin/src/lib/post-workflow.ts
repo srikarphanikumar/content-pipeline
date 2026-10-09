@@ -353,6 +353,29 @@ export async function publishBlueskyPromotionForPost(postId: string) {
   revalidatePath(`/posts/${postId}`);
 }
 
+async function markCompleteIfFullySyndicated(postId: string) {
+  const publishedCount = await db.platformPublication.count({
+    where: {
+      postId,
+      platform: {
+        in: ["DEVTO", "LINKEDIN", "BLUESKY"],
+      },
+      status: "PUBLISHED",
+    },
+  });
+
+  if (publishedCount >= 3) {
+    await db.post.update({
+      where: {
+        id: postId,
+      },
+      data: {
+        status: "COMPLETE",
+      },
+    });
+  }
+}
+
 export async function publishSyndicationAndSocialsForPost(postId: string) {
   const post = await db.post.findUnique({
     where: {
@@ -430,26 +453,7 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
     }),
   );
 
-  const publishedCount = await db.platformPublication.count({
-    where: {
-      postId,
-      platform: {
-        in: ["DEVTO", "LINKEDIN", "BLUESKY"],
-      },
-      status: "PUBLISHED",
-    },
-  });
-
-  if (publishedCount >= 3) {
-    await db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: "COMPLETE",
-      },
-    });
-  }
+  await markCompleteIfFullySyndicated(postId);
 
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
@@ -761,4 +765,60 @@ export async function publicationResults(postId: string) {
       status: true,
     },
   });
+}
+
+const retryablePlatforms = {
+  BLUESKY: publishBlueskyPromotionForPost,
+  DEVTO: publishDevToSyndicationForPost,
+  LINKEDIN: publishLinkedInPromotionForPost,
+} as const;
+
+// Re-runs only the platforms that failed. publishSyndicationAndSocialsForPost is not reused:
+// it always re-posts LinkedIn and Bluesky, which would duplicate the ones that succeeded.
+export async function retryFailedPlatforms(postId: string) {
+  const failed = (await publicationResults(postId))
+    .filter((publication) => publication.status === "FAILED")
+    .map((publication) => publication.platform);
+
+  if (failed.includes("BLOG")) {
+    // Nothing downstream ran without the canonical post, so this is a full approve again.
+    await approveAndPublishPost(postId);
+    return;
+  }
+
+  const socials = failed.filter(
+    (platform): platform is keyof typeof retryablePlatforms => platform in retryablePlatforms,
+  );
+
+  if (socials.some((platform) => platform === "LINKEDIN" || platform === "BLUESKY")) {
+    const promoCount = await db.promotionAsset.count({
+      where: {
+        content: {
+          not: "",
+        },
+        postId,
+        type: {
+          in: ["LINKEDIN_POST", "BLUESKY_POST"],
+        },
+      },
+    });
+
+    if (promoCount < 2) {
+      await ensurePromotionAssets(postId);
+    }
+  }
+
+  await Promise.all(
+    socials.map(async (platform) => {
+      try {
+        await retryablePlatforms[platform](postId);
+      } catch (error) {
+        await recordPlatformFailure(postId, platform, error);
+      }
+    }),
+  );
+
+  await markCompleteIfFullySyndicated(postId);
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
 }

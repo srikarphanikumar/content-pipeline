@@ -7,7 +7,7 @@ import {
   preparePostAssetsForReview,
 } from "@/app/topics/pipeline";
 import { collectPlatformMetricSnapshots, latestPlatformStatsLines } from "@/lib/analytics";
-import { sendBotMessage, sendNextForReview } from "@/lib/pipeline-bot";
+import { credentialWarnings, sendBotMessage, sendNextForReview } from "@/lib/pipeline-bot";
 import { approvableStatuses } from "@/lib/post-workflow";
 import { escapeHtml } from "@/lib/telegram";
 import { inactiveTopicStatuses } from "@/lib/topic-status";
@@ -319,7 +319,7 @@ export const morningPublishingSummary = inngest.createFunction(
   },
   async ({ step }) => {
     const footer = await step.run("Build pipeline status line", async () => {
-      const [readyCount, draftingCount, failedCount] = await Promise.all([
+      const [readyCount, draftingCount, failedCount, warnings] = await Promise.all([
         db.post.count({
           where: {
             sourcePlatform: null,
@@ -338,12 +338,15 @@ export const morningPublishingSummary = inngest.createFunction(
             status: "FAILED",
           },
         }),
+        // Mornings only flag what would break today's Approve; the nightly report warns earlier.
+        credentialWarnings({ withinDays: 1 }),
       ]);
 
       return [
         notificationDate(),
         `Buffer: ${pluralize(readyCount, "ready draft")}, ${draftingCount} in progress`,
         `Failures: ${failedCount > 0 ? `${pluralize(failedCount, "platform action")} to review` : "none"}`,
+        ...warnings.map((warning) => `⚠️ ${warning}`),
       ].join("\n");
     });
 
@@ -458,9 +461,15 @@ export const nightlyStatsAndTopics = inngest.createFunction(
       topicState.selectedTopics.length > 0
         ? topicState.selectedTopics.map((topic) => `- ${topic.title}`).join("\n")
         : "- No selected topics ready for drafting.";
+    const warnings = await step.run("Check platform credentials", async () =>
+      credentialWarnings({ withinDays: 7 }),
+    );
     const text = [
       `📊 <b>Platform report · ${escapeHtml(notificationDate())}</b>`,
       "",
+      ...(warnings.length
+        ? [...warnings.map((warning) => `⚠️ <b>${escapeHtml(warning)}</b>`), ""]
+        : []),
       `Blog: ${escapeHtml(summaryForPlatform("BLOG"))}`,
       `dev.to: ${escapeHtml(summaryForPlatform("DEVTO"))}`,
       `LinkedIn: ${escapeHtml(summaryForPlatform("LINKEDIN"))}`,

@@ -73,13 +73,10 @@ BLUESKY_APP_PASSWORD
 INNGEST_EVENT_KEY
 INNGEST_SIGNING_KEY
 INNGEST_ENV                     production
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_WHATSAPP_FROM            whatsapp:+15559806853
-TWILIO_MESSAGING_SERVICE_SID
-WHATSAPP_TO                     whatsapp:+12038431589
-TWILIO_MORNING_TEMPLATE_SID
-TWILIO_NIGHTLY_TEMPLATE_SID
+TELEGRAM_BOT_TOKEN              from @BotFather (@uth_pipeline_bot)
+TELEGRAM_CHAT_ID                the only chat the bot talks to
+TELEGRAM_WEBHOOK_SECRET         random; Telegram echoes it on every webhook call
+PIPELINE_BASE_URL               optional, defaults to https://pipeline.mspk.me
 ```
 
 Important security note:
@@ -461,34 +458,39 @@ Implemented:
 - Imported Substack subscribers on July 13, 2026:
   345 parsed, 344 created, 1 already active, 345 active subscribers total.
 
-### WhatsApp Notifications
+### Telegram Bot
 
-Twilio WhatsApp production setup is operational for test sends.
+WhatsApp/Twilio was removed in October 2026 and replaced by a Telegram bot
+(`@uth_pipeline_bot`) that only talks to `TELEGRAM_CHAT_ID`.
 
-Implemented:
+How it works:
 
-- Twilio env configuration is wired in the admin app.
-- WhatsApp sender is configured as `whatsapp:+15559806853`.
-- Recipient is configured as `whatsapp:+12038431589`.
-- Morning and nightly Twilio Content template SIDs are configured.
-- Morning Inngest summary reports selected topic/post readiness and platform outcomes.
-- Nightly Inngest summary reports available platform stats and next-day topic context.
-- Settings page has a test WhatsApp send action and notification delivery logging.
-- Inngest cron schedules now run on weekdays only in `America/New_York` time:
-  - topic planning: 5:30 AM
-  - draft buffer: 5:45 AM
-  - approval prep: 6:00 AM
-  - morning summary: 6:45 AM
-  - nightly stats/topic prep: 9:00 PM
+- `POST /api/telegram/webhook` checks the `X-Telegram-Bot-Api-Secret-Token` header and the
+  chat id, then queues an Inngest event keyed by the Telegram update id (so redelivered
+  updates never run twice). All real work runs in Inngest (`src/inngest/bot-functions.ts`).
+- Morning (6:45 AM ET, weekdays): one approval card for the oldest ready draft with
+  Approve / Improve / Reject buttons and a short pipeline status footer. If no draft is ready,
+  it offers the next selected topic with Draft / Skip.
+- Approve runs the same approve-and-publish flow as the post workspace and edits the card with
+  per-platform results.
+- Improve asks what to change (reply with notes, or `/polish`), rewrites the draft with OpenAI,
+  refreshes the dev.to draft and promo copy, and sends a new card.
+- Reject deletes the draft, marks its topic `rejected` (excluded from active counts and not
+  re-suggested), then shows the next ready draft or a topic to draft.
+- `/next` shows the next post waiting for approval.
+- Nightly (9:00 PM ET, weekdays): platform report, latest stats, and topics for tomorrow.
+- Every bot message is logged in `NotificationDelivery` with the post/topic it is about.
+  Settings shows the log, webhook status, a test send, and webhook registration.
 
-Next checks:
+Setup after deploy: Settings, then Register webhook (production only; a bot has one webhook).
 
-- Confirm the weekday morning and nightly Inngest template sends arrive end to end.
-- Use the delivery log in Settings to watch Twilio status, error codes, and message SIDs.
-- Keep nightly summaries tied to stored analytics snapshots instead of one-off live fetches.
-- July 13, 2026 9:00 PM nightly job ran but Twilio delivery failed with error `21656`.
-  The code now sanitizes Twilio ContentVariables before template sends; deploy this before
-  retesting nightly/morning manual triggers.
+Inngest schedules (weekdays, `America/New_York`):
+
+- topic planning: 5:30 AM
+- draft buffer: 5:45 AM
+- approval prep: 6:00 AM
+- morning approval card: 6:45 AM
+- nightly stats/topic prep: 9:00 PM
 
 ### dev.to Draft Publishing
 
@@ -585,8 +587,8 @@ Implemented:
   - LinkedIn and Bluesky promo copy
 - `Draft all selected` creates linked draft records in bulk without attempting every expensive platform step in one request.
 - Weekday morning approval prep runs at 6:00 AM ET and ensures at least one pipeline-owned post is `DRAFT_READY` or `READY_TO_PUBLISH` before the morning summary.
-- Morning WhatsApp summary reports ready posts, drafts needing review, platform activity, and failures.
-- Nightly WhatsApp summary reports dev.to/Bluesky stats where available, LinkedIn status, and next-day selected topics.
+- Morning Telegram approval card shows the next ready draft with Approve / Improve / Reject.
+- Nightly Telegram report covers platform status, stats where available, and next-day selected topics.
 
 Needed:
 
@@ -802,7 +804,7 @@ Done:
 - Inngest daily topic planning and draft-buffer functions are registered.
 - Inngest schedules are weekday-only in America/New_York time.
 - Inngest prepares a weekday morning approval candidate by 6:45 AM ET.
-- Twilio WhatsApp summaries are wired but waiting on production WhatsApp/template approval.
+- Telegram bot sends the morning approval card and nightly stats, and runs approve/improve/reject.
 
 Still to build:
 
@@ -811,5 +813,4 @@ Still to build:
 - Review/approval workflow before canonical publishing.
 - Better multi-platform publish result UI.
 - LinkedIn impression analytics permissions/reporting.
-- WhatsApp delivery confirmation once Twilio approval is green.
 - Analytics.

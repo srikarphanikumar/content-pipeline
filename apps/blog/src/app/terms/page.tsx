@@ -23,12 +23,11 @@ export default function TermsPage() {
         <h1 className="mt-3 text-4xl font-semibold tracking-tight">
           Under The Hood Terms and Conditions
         </h1>
-        <p className="mt-3 text-sm text-stone-600">Last updated: July 11, 2026</p>
+        <p className="mt-3 text-sm text-stone-600">Last updated: October 9, 2026</p>
 
         <div className="prose prose-stone mt-8 max-w-none prose-a:text-orange-700">
           <p>
-            These terms apply to Under The Hood, including the website, newsletter, and
-            optional WhatsApp notifications.
+            These terms apply to Under The Hood, including the website and newsletter.
           </p>
 
           <h2>Content</h2>
@@ -42,13 +41,7 @@ export default function TermsPage() {
           <p>
             By subscribing or opting in, you agree to receive publication-related
             messages from Under The Hood. Email updates may include new posts and
-            publication updates. WhatsApp updates may include publishing pipeline status,
-            post statistics, topic planning, and operational summaries.
-          </p>
-          <p>
-            WhatsApp message frequency may vary, but the expected cadence is up to two
-            operational messages per day. Message and data rates may apply. Reply STOP to
-            opt out of WhatsApp messages.
+            publication updates.
           </p>
 
           <h2>Acceptable use</h2>

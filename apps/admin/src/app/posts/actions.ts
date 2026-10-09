@@ -4,12 +4,11 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, parseTags, slugify } from "@content-pipeline/db";
-import type { Platform, PostStatus, PromotionAssetType } from "@content-pipeline/db";
-import { publishBlueskyPost } from "@/lib/bluesky";
+import type { PostStatus } from "@content-pipeline/db";
 import { generateAndStoreCoverImage } from "@/lib/cover-image";
-import { createDevToDraft, publishDevToArticle } from "@/lib/devto";
-import { publishLinkedInPost } from "@/lib/linkedin";
-import { sendPostToActiveSubscribers } from "@/lib/newsletter-send";
+import { createDevToDraft } from "@/lib/devto";
+import * as workflow from "@/lib/post-workflow";
+import { canonicalPostUrl, queueStatuses } from "@/lib/post-workflow";
 import { generatePromotionCopy } from "@/lib/promotion";
 import { preparePostAssetsForReview } from "@/app/topics/pipeline";
 
@@ -25,29 +24,6 @@ const statuses: PostStatus[] = [
   "PROMOTED_SOCIAL",
   "COMPLETE",
 ];
-const queueStatuses: PostStatus[] = [
-  "IDEA",
-  "SELECTED",
-  "DRAFTING",
-  "DRAFT_READY",
-  "READY_TO_PUBLISH",
-];
-const blogPublishedStatuses: PostStatus[] = [
-  "PUBLISHED_BLOG",
-  "PUBLISHED_DEVTO",
-  "PROMOTED_LINKEDIN",
-  "PROMOTED_SOCIAL",
-  "COMPLETE",
-];
-
-function blogBaseUrl() {
-  return (process.env.BLOG_BASE_URL || "https://blog.mspk.me").replace(/\/$/, "");
-}
-
-function canonicalPostUrl(slug: string) {
-  return `${blogBaseUrl()}/posts/${slug}`;
-}
-
 function stringValue(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -88,121 +64,6 @@ function tomorrowMorningNewYork() {
   const offsetTotalMinutes = offsetHours * 60 + Math.sign(offsetHours) * offsetMinutes;
 
   return new Date(Date.UTC(year, month - 1, day + 1, 9, 0, 0) - offsetTotalMinutes * 60 * 1000);
-}
-
-async function promotionAssetContent(postId: string, type: PromotionAssetType) {
-  const asset = await db.promotionAsset.findUnique({
-    where: {
-      postId_type: {
-        postId,
-        type,
-      },
-    },
-  });
-
-  if (!asset?.content.trim()) {
-    throw new Error("Generate and save promotion copy before posting.");
-  }
-
-  return asset.content;
-}
-
-async function startPlatformPublication(postId: string, platform: Platform) {
-  return db.platformPublication.upsert({
-    where: {
-      postId_platform: {
-        postId,
-        platform,
-      },
-    },
-    create: {
-      postId,
-      platform,
-      status: "GENERATED",
-      errorMessage: null,
-    },
-    update: {
-      status: "GENERATED",
-      externalId: null,
-      externalUrl: null,
-      publishedAt: null,
-      errorMessage: null,
-    },
-  });
-}
-
-async function markPlatformPublicationPublished(
-  publicationId: string,
-  result: {
-    externalId?: string | null;
-    externalUrl?: string | null;
-  },
-) {
-  await db.platformPublication.update({
-    where: {
-      id: publicationId,
-    },
-    data: {
-      status: "PUBLISHED",
-      externalId: result.externalId || null,
-      externalUrl: result.externalUrl || null,
-      publishedAt: new Date(),
-      errorMessage: null,
-    },
-  });
-}
-
-async function markPlatformPublicationFailed(publicationId: string, error: unknown) {
-  await db.platformPublication.update({
-    where: {
-      id: publicationId,
-    },
-    data: {
-      status: "FAILED",
-      errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
-    },
-  });
-}
-
-async function recordPlatformFailure(postId: string, platform: Platform, error: unknown) {
-  await db.platformPublication.upsert({
-    where: {
-      postId_platform: {
-        postId,
-        platform,
-      },
-    },
-    create: {
-      postId,
-      platform,
-      status: "FAILED",
-      errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
-    },
-    update: {
-      status: "FAILED",
-      errorMessage: error instanceof Error ? error.message : "Unknown platform posting error.",
-    },
-  });
-}
-
-async function isCanonicalBlogPublished(postId: string, status: PostStatus) {
-  if (blogPublishedStatuses.includes(status)) {
-    return true;
-  }
-
-  const publication = await db.platformPublication.findUnique({
-    where: {
-      postId_platform: {
-        postId,
-        platform: "BLOG",
-      },
-    },
-    select: {
-      status: true,
-    },
-  });
-
-  return publication?.status === "PUBLISHED";
 }
 
 export async function createPost(formData: FormData) {
@@ -269,34 +130,7 @@ export async function updatePost(postId: string, formData: FormData) {
 
 export async function deletePipelinePost(postId: string) {
   await requireAdmin();
-
-  const post = await db.post.findUnique({
-    where: {
-      id: postId,
-    },
-    select: {
-      sourcePlatform: true,
-      status: true,
-    },
-  });
-
-  if (!post) {
-    throw new Error("Post not found.");
-  }
-
-  if (post.sourcePlatform === "SUBSTACK") {
-    throw new Error("Imported Substack archive posts are protected and cannot be deleted.");
-  }
-
-  if (!queueStatuses.includes(post.status)) {
-    throw new Error("Only idea, draft, and queue posts can be deleted from the pipeline.");
-  }
-
-  await db.post.delete({
-    where: {
-      id: postId,
-    },
-  });
+  await workflow.deleteQueuedPost(postId);
 
   revalidatePath("/");
   revalidatePath("/posts");
@@ -357,79 +191,7 @@ export async function generateCoverImageForPost(postId: string) {
 
 export async function publishBlogCanonicalPost(postId: string) {
   await requireAdmin();
-
-  const post = await db.post.findUnique({
-    where: {
-      id: postId,
-    },
-  });
-
-  if (!post) {
-    throw new Error("Post not found.");
-  }
-
-  if (post.sourcePlatform === "SUBSTACK") {
-    throw new Error("Imported Substack archive posts are already canonical and cannot be republished.");
-  }
-
-  if (!post.title.trim() || !post.slug.trim() || !post.bodyMarkdown.trim()) {
-    throw new Error("Title, slug, and body are required before publishing to the blog.");
-  }
-
-  const publishedAt = post.publishedAt || new Date();
-  const canonicalUrl = post.canonicalUrl || canonicalPostUrl(post.slug);
-  const nextStatus = blogPublishedStatuses.includes(post.status)
-    ? post.status
-    : "PUBLISHED_BLOG";
-
-  await db.$transaction([
-    db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: nextStatus,
-        canonicalUrl,
-        publishedAt,
-      },
-    }),
-    db.platformPublication.upsert({
-      where: {
-        postId_platform: {
-          postId,
-          platform: "BLOG",
-        },
-      },
-      create: {
-        postId,
-        platform: "BLOG",
-        status: "PUBLISHED",
-        externalId: post.slug,
-        externalUrl: canonicalUrl,
-        publishedAt,
-        errorMessage: null,
-      },
-      update: {
-        status: "PUBLISHED",
-        externalId: post.slug,
-        externalUrl: canonicalUrl,
-        publishedAt,
-        errorMessage: null,
-      },
-    }),
-  ]);
-
-  if (nextStatus === "PUBLISHED_BLOG" && post.sourcePlatform === null) {
-    try {
-      await sendPostToActiveSubscribers(postId);
-    } catch (error) {
-      console.error("Published blog post, but newsletter send failed.", error);
-    }
-  }
-
-  revalidatePath("/");
-  revalidatePath("/posts");
-  revalidatePath(`/posts/${postId}`);
+  await workflow.publishBlogCanonicalPost(postId);
 }
 
 export async function schedulePostForTomorrow(postId: string) {
@@ -605,49 +367,7 @@ export async function recreateDevToDraftForPost(postId: string) {
 
 export async function publishDevToSyndicationForPost(postId: string) {
   await requireAdmin();
-
-  const [post, existingPublication] = await Promise.all([
-    db.post.findUnique({
-      where: {
-        id: postId,
-      },
-    }),
-    db.platformPublication.findUnique({
-      where: {
-        postId_platform: {
-          postId,
-          platform: "DEVTO",
-        },
-      },
-    }),
-  ]);
-
-  if (!post) {
-    throw new Error("Post not found.");
-  }
-
-  const publication = await startPlatformPublication(postId, "DEVTO");
-
-  try {
-    const result = await publishDevToArticle(post, existingPublication?.externalId);
-
-    await markPlatformPublicationPublished(publication.id, {
-      externalId: String(result.id),
-      externalUrl: result.url || existingPublication?.externalUrl || null,
-    });
-
-    await db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: "PUBLISHED_DEVTO",
-      },
-    });
-  } catch (error) {
-    await markPlatformPublicationFailed(publication.id, error);
-    throw error;
-  }
+  await workflow.publishDevToSyndicationForPost(postId);
 }
 
 export async function generatePromotionAssetsForPost(postId: string) {
@@ -782,239 +502,20 @@ export async function updatePromotionAssetsForPost(postId: string, formData: For
 
 export async function publishLinkedInPromotionForPost(postId: string) {
   await requireAdmin();
-
-  const [post, linkedInPost, connection] = await Promise.all([
-    db.post.findUnique({
-      where: {
-        id: postId,
-      },
-    }),
-    promotionAssetContent(postId, "LINKEDIN_POST"),
-    db.platformConnection.findUnique({
-      where: {
-        platform: "LINKEDIN",
-      },
-    }),
-  ]);
-
-  if (!post) {
-    throw new Error("Post not found.");
-  }
-
-  if (!connection) {
-    throw new Error("Connect LinkedIn from Settings before posting.");
-  }
-
-  const publication = await startPlatformPublication(postId, "LINKEDIN");
-
-  try {
-    const result = await publishLinkedInPost({
-      accessToken: connection.accessToken,
-      imageUrl: post.coverImageUrl,
-      memberId: connection.providerAccountId || "",
-      title: post.title,
-      text: linkedInPost,
-    });
-
-    await markPlatformPublicationPublished(publication.id, result);
-    await db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: "PROMOTED_LINKEDIN",
-      },
-    });
-  } catch (error) {
-    await markPlatformPublicationFailed(publication.id, error);
-    throw error;
-  }
-
-  revalidatePath("/posts");
-  revalidatePath(`/posts/${postId}`);
+  await workflow.publishLinkedInPromotionForPost(postId);
 }
 
 export async function publishBlueskyPromotionForPost(postId: string) {
   await requireAdmin();
-
-  const blueskyPost = await promotionAssetContent(postId, "BLUESKY_POST");
-  const publication = await startPlatformPublication(postId, "BLUESKY");
-
-  try {
-    const result = await publishBlueskyPost(blueskyPost);
-
-    await markPlatformPublicationPublished(publication.id, result);
-    await db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: "PROMOTED_SOCIAL",
-      },
-    });
-  } catch (error) {
-    await markPlatformPublicationFailed(publication.id, error);
-    throw error;
-  }
-
-  revalidatePath("/posts");
-  revalidatePath(`/posts/${postId}`);
+  await workflow.publishBlueskyPromotionForPost(postId);
 }
 
 export async function publishSyndicationAndSocialsForPost(postId: string) {
   await requireAdmin();
-
-  const post = await db.post.findUnique({
-    where: {
-      id: postId,
-    },
-    include: {
-      publications: true,
-      promotionAssets: true,
-    },
-  });
-
-  if (!post) {
-    throw new Error("Post not found.");
-  }
-
-  if (!(await isCanonicalBlogPublished(postId, post.status))) {
-    await db.platformPublication.upsert({
-      where: {
-        postId_platform: {
-          postId,
-          platform: "DEVTO",
-        },
-      },
-      create: {
-        postId,
-        platform: "DEVTO",
-        status: "FAILED",
-        errorMessage: "Publish the canonical blog post before posting to socials.",
-      },
-      update: {
-        status: "FAILED",
-        errorMessage: "Publish the canonical blog post before posting to socials.",
-      },
-    });
-    revalidatePath("/posts");
-    revalidatePath(`/posts/${postId}`);
-    return;
-  }
-
-  const publications = new Map(
-    post.publications.map((publication) => [publication.platform, publication.status]),
-  );
-  const tasks: Array<{ platform: Platform; run: () => Promise<unknown> }> = [];
-
-  if (publications.get("DEVTO") !== "PUBLISHED") {
-    tasks.push({
-      platform: "DEVTO",
-      run: () => publishDevToSyndicationForPost(postId),
-    });
-  }
-
-  tasks.push({
-    platform: "LINKEDIN",
-    run: () => publishLinkedInPromotionForPost(postId),
-  });
-
-  tasks.push({
-    platform: "BLUESKY",
-    run: () => publishBlueskyPromotionForPost(postId),
-  });
-
-  if (tasks.length === 0) {
-    revalidatePath("/posts");
-    revalidatePath(`/posts/${postId}`);
-    return;
-  }
-
-  await Promise.all(
-    tasks.map(async (task) => {
-      try {
-        await task.run();
-      } catch (error) {
-        await recordPlatformFailure(postId, task.platform, error);
-      }
-    }),
-  );
-
-  const publishedCount = await db.platformPublication.count({
-    where: {
-      postId,
-      platform: {
-        in: ["DEVTO", "LINKEDIN", "BLUESKY"],
-      },
-      status: "PUBLISHED",
-    },
-  });
-
-  if (publishedCount >= 3) {
-    await db.post.update({
-      where: {
-        id: postId,
-      },
-      data: {
-        status: "COMPLETE",
-      },
-    });
-  }
-
-  revalidatePath("/posts");
-  revalidatePath(`/posts/${postId}`);
-
-  // Do not throw from the aggregate action. Each platform action records its own
-  // FAILED status and error message, and throwing here crashes the production page.
+  await workflow.publishSyndicationAndSocialsForPost(postId);
 }
 
 export async function approveAndPublishPost(postId: string) {
   await requireAdmin();
-
-  const post = await db.post.findUnique({
-    where: {
-      id: postId,
-    },
-    select: {
-      sourcePlatform: true,
-    },
-  });
-
-  if (!post) {
-    throw new Error("Post not found.");
-  }
-
-  if (post.sourcePlatform === "SUBSTACK") {
-    await recordPlatformFailure(
-      postId,
-      "BLOG",
-      new Error("Imported Substack archive posts cannot be approved for republishing."),
-    );
-    revalidatePath("/posts");
-    revalidatePath(`/posts/${postId}`);
-    return;
-  }
-
-  await db.post.update({
-    where: {
-      id: postId,
-    },
-    data: {
-      status: "READY_TO_PUBLISH",
-    },
-  });
-
-  try {
-    await publishBlogCanonicalPost(postId);
-  } catch (error) {
-    await recordPlatformFailure(postId, "BLOG", error);
-    revalidatePath("/posts");
-    revalidatePath(`/posts/${postId}`);
-    return;
-  }
-
-  await publishSyndicationAndSocialsForPost(postId);
-
-  revalidatePath("/posts");
-  revalidatePath(`/posts/${postId}`);
+  await workflow.approveAndPublishPost(postId);
 }

@@ -1,13 +1,17 @@
 import { db, formatDate } from "@content-pipeline/db";
 import { AdminShell } from "../components/AdminShell";
 import { SubmitButton } from "../components/SubmitButton";
-import { sendTestWhatsAppNotification } from "./actions";
+import { pipelineBaseUrl } from "@/lib/pipeline-bot";
+import { getTelegramWebhookInfo, telegramConfigured } from "@/lib/telegram";
+import { registerTelegramWebhook, sendTestTelegramMessage } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 type SettingsPageProps = {
   searchParams: Promise<{
+    detail?: string;
     linkedin?: string;
+    telegram?: string;
   }>;
 };
 
@@ -17,11 +21,20 @@ const linkedInMessages: Record<string, string> = {
   "invalid-state": "LinkedIn connection failed state validation. Try connecting again.",
 };
 
-async function getWhatsAppDeliveries() {
+const telegramMessages: Record<string, string> = {
+  "test-failed": "Telegram test message failed.",
+  "test-sent": "Telegram test message sent. Check the bot chat.",
+  "webhook-failed": "Telegram webhook registration failed.",
+  "webhook-preview":
+    "Register the Telegram webhook from production only. A bot has one webhook, and a preview URL would take it over.",
+  "webhook-registered": "Telegram webhook registered. Button taps and replies now reach the pipeline.",
+};
+
+async function getTelegramDeliveries() {
   try {
     const deliveries = await db.notificationDelivery.findMany({
       where: {
-        channel: "WHATSAPP",
+        channel: "TELEGRAM",
       },
       orderBy: {
         createdAt: "desc",
@@ -34,7 +47,7 @@ async function getWhatsAppDeliveries() {
       error: null,
     };
   } catch (error) {
-    console.error("Failed to load WhatsApp delivery log", error);
+    console.error("Failed to load Telegram delivery log", error);
 
     return {
       deliveries: [],
@@ -44,29 +57,57 @@ async function getWhatsAppDeliveries() {
   }
 }
 
+async function getWebhookStatus() {
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    return null;
+  }
+
+  try {
+    const info = await getTelegramWebhookInfo();
+    const expectedUrl = `${pipelineBaseUrl()}/api/telegram/webhook`;
+
+    return {
+      error: info.last_error_message || null,
+      pending: info.pending_update_count,
+      registered: info.url === expectedUrl,
+      url: info.url,
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Could not reach Telegram.",
+      pending: 0,
+      registered: false,
+      url: "",
+    };
+  }
+}
+
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
-  const { linkedin } = await searchParams;
+  const { detail, linkedin, telegram } = await searchParams;
   const linkedInConnection = await db.platformConnection.findUnique({
     where: {
       platform: "LINKEDIN",
     },
   });
-  const message = linkedin ? linkedInMessages[linkedin] || `LinkedIn returned: ${linkedin}` : null;
+  const message = linkedin
+    ? linkedInMessages[linkedin] || `LinkedIn returned: ${linkedin}`
+    : telegram
+      ? `${telegramMessages[telegram] || `Telegram: ${telegram}`}${detail ? ` ${detail}` : ""}`
+      : null;
   const blueskyHandle = process.env.BLUESKY_HANDLE;
   const blueskyConfigured = Boolean(blueskyHandle && process.env.BLUESKY_APP_PASSWORD);
   const devToConfigured = Boolean(process.env.DEVTO_API_KEY);
   const openAiConfigured = Boolean(process.env.OPENAI_API_KEY);
-  const whatsAppConfigured = Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_MESSAGING_SERVICE_SID &&
-      process.env.TWILIO_WHATSAPP_FROM &&
-      process.env.WHATSAPP_TO &&
-      process.env.TWILIO_MORNING_TEMPLATE_SID &&
-      process.env.TWILIO_NIGHTLY_TEMPLATE_SID,
-  );
-  const { deliveries: whatsappDeliveries, error: whatsappDeliveryError } =
-    await getWhatsAppDeliveries();
+  const telegramReady = telegramConfigured();
+  const [{ deliveries: telegramDeliveries, error: telegramDeliveryError }, webhook] =
+    await Promise.all([getTelegramDeliveries(), getWebhookStatus()]);
+  const telegramStatus = !telegramReady
+    ? "Missing env vars"
+    : webhook?.registered
+      ? webhook.error
+        ? "Webhook errors"
+        : "Ready"
+      : "Webhook not registered";
 
   const cards = [
     {
@@ -115,21 +156,32 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       action: null,
     },
     {
-      title: "WhatsApp",
-      eyebrow: "Twilio",
-      status: whatsAppConfigured ? "Ready to test" : "Missing env vars",
-      tone: whatsAppConfigured ? "ready" : "warning",
-      detail: whatsAppConfigured
-        ? `Sending to ${process.env.WHATSAPP_TO}. Sender ${process.env.TWILIO_WHATSAPP_FROM}.`
-        : "Set Twilio credentials, Messaging Service SID, template SIDs, sender, and recipient.",
-      meta: process.env.TWILIO_MESSAGING_SERVICE_SID
-        ? `Messaging service: ${process.env.TWILIO_MESSAGING_SERVICE_SID}`
-        : "Template sends require TWILIO_MESSAGING_SERVICE_SID.",
-      action: (
-        <form action={sendTestWhatsAppNotification}>
-          <SubmitButton pendingLabel="Sending test...">Send test WhatsApp</SubmitButton>
-        </form>
-      ),
+      title: "Telegram",
+      eyebrow: "Bot",
+      status: telegramStatus,
+      tone: telegramStatus === "Ready" ? "ready" : "warning",
+      detail: telegramReady
+        ? `Morning approval cards and nightly stats go to chat ${process.env.TELEGRAM_CHAT_ID}. Approve, Improve and Reject run from the buttons.`
+        : "Set TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, and TELEGRAM_WEBHOOK_SECRET.",
+      meta: webhook
+        ? webhook.registered
+          ? `Webhook: ${webhook.url}${webhook.pending ? ` · ${webhook.pending} pending` : ""}${
+              webhook.error ? ` · Last error: ${webhook.error}` : ""
+            }`
+          : `Webhook: ${webhook.url || "not set"}${webhook.error ? ` · ${webhook.error}` : ""}`
+        : null,
+      action: telegramReady ? (
+        <div className="flex flex-wrap gap-3">
+          <form action={sendTestTelegramMessage}>
+            <SubmitButton pendingLabel="Sending test...">Send test message</SubmitButton>
+          </form>
+          <form action={registerTelegramWebhook}>
+            <SubmitButton pendingLabel="Registering...">
+              {webhook?.registered ? "Re-register webhook" : "Register webhook"}
+            </SubmitButton>
+          </form>
+        </div>
+      ) : null,
     },
   ];
 
@@ -183,14 +235,14 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
               Delivery log
             </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">WhatsApp attempts</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Telegram messages</h2>
           </div>
-          <p className="text-sm text-zinc-500">Latest 8 sends from Twilio/Inngest tests.</p>
+          <p className="text-sm text-zinc-500">Latest 8 messages sent by the bot.</p>
         </div>
 
-        {whatsappDeliveryError ? (
+        {telegramDeliveryError ? (
           <div className="mt-4 rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-            {whatsappDeliveryError}
+            {telegramDeliveryError}
           </div>
         ) : null}
 
@@ -201,20 +253,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 <th className="px-4 py-3">Time</th>
                 <th className="px-4 py-3">Kind</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Twilio</th>
+                <th className="px-4 py-3">Message</th>
                 <th className="px-4 py-3">Error</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
-              {whatsappDeliveries.length > 0 ? (
-                whatsappDeliveries.map((delivery) => (
+              {telegramDeliveries.length > 0 ? (
+                telegramDeliveries.map((delivery) => (
                   <tr key={delivery.id}>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(delivery.createdAt)}</td>
                     <td className="px-4 py-3 text-zinc-300">{delivery.kind}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                          ["delivered", "sent", "queued", "accepted"].includes(delivery.status)
+                          ["sent", "answered"].includes(delivery.status)
                             ? "bg-emerald-500/15 text-emerald-300"
                             : "bg-amber-500/15 text-amber-300"
                         }`}
@@ -223,7 +275,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                       </span>
                     </td>
                     <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-zinc-500">
-                      {delivery.messageSid || delivery.templateSid || "-"}
+                      {delivery.messageId || "-"}
                     </td>
                     <td className="max-w-md px-4 py-3 text-zinc-400">
                       {delivery.errorCode ? `${delivery.errorCode}: ` : ""}
@@ -234,7 +286,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               ) : (
                 <tr>
                   <td className="px-4 py-6 text-center text-zinc-500" colSpan={5}>
-                    No WhatsApp delivery attempts recorded yet.
+                    No Telegram messages recorded yet.
                   </td>
                 </tr>
               )}

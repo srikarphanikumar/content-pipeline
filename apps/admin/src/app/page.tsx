@@ -3,6 +3,7 @@ import { db } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink, SecondaryLink } from "./components/AdminShell";
 import { SubmitButton } from "./components/SubmitButton";
 import { collectAnalyticsNow } from "./analytics/actions";
+import { inactiveTopicStatuses } from "@/lib/topic-status";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function Home() {
     db.topic.count({
       where: {
         status: {
-          not: "done",
+          notIn: inactiveTopicStatuses,
         },
       },
     }),

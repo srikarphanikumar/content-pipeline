@@ -259,6 +259,27 @@ function parseGeneratedTopics(value: string) {
     .filter((topic) => topic.title);
 }
 
+// Shared by first drafts and Telegram "Improve" rewrites so both keep the same voice.
+export const draftVoiceRules = [
+  "Voice and style rules:",
+  "- Match the style of the example posts below.",
+  "- Start from a familiar developer moment, bug, surprise, or tiny annoyance. Do not start with a broad textbook introduction.",
+  "- Write like a human engineer explaining something they personally debugged or finally understood.",
+  "- Use short paragraphs. Keep the rhythm punchy.",
+  "- Use 'you' naturally.",
+  "- Explain the mechanism under the hood, but avoid sounding like documentation.",
+  "- Prefer concrete examples over abstract claims.",
+  "- Do not include a top-level H1 in bodyMarkdown. The app already renders the title.",
+  "- Use ## headings for major sections. Do not use tiny #### headings because they are too subtle on dev.to.",
+  "- Do not include a References section.",
+  "- Do not include a generic Conclusion heading.",
+  "- Avoid em dashes entirely.",
+  "- Avoid AI-ish phrases like 'delve into', 'unpack', 'paradigm shift', 'robust', 'seamless', 'crucial', 'in today's fast-paced', 'at the heart of', 'game changer'.",
+  "- Aim for 1200-1800 words. It should feel like a real Under The Hood deep dive, not a short note.",
+  "- Use enough sections, examples, and caveats to make the mechanism useful, but do not pad.",
+  "- The goal is a useful human first draft, not a finished encyclopedia entry.",
+];
+
 function draftFallback(topic: {
   title: string;
   description: string | null;
@@ -305,7 +326,7 @@ function draftFallback(topic: {
   };
 }
 
-function cleanGeneratedDraft(value: string) {
+export function cleanGeneratedDraft(value: string) {
   return value
     .replace(/—/g, ", ")
     .replace(/–/g, "-")
@@ -863,23 +884,7 @@ export async function createDraftPostRecordFromTopic(topicId: string) {
             "",
             "Return JSON with exactly these keys: title, subtitle, description, tags, bodyMarkdown.",
             "",
-            "Voice and style rules:",
-            "- Match the style of the example posts below.",
-            "- Start from a familiar developer moment, bug, surprise, or tiny annoyance. Do not start with a broad textbook introduction.",
-            "- Write like a human engineer explaining something they personally debugged or finally understood.",
-            "- Use short paragraphs. Keep the rhythm punchy.",
-            "- Use 'you' naturally.",
-            "- Explain the mechanism under the hood, but avoid sounding like documentation.",
-            "- Prefer concrete examples over abstract claims.",
-            "- Do not include a top-level H1 in bodyMarkdown. The app already renders the title.",
-            "- Use ## headings for major sections. Do not use tiny #### headings because they are too subtle on dev.to.",
-            "- Do not include a References section.",
-            "- Do not include a generic Conclusion heading.",
-            "- Avoid em dashes entirely.",
-            "- Avoid AI-ish phrases like 'delve into', 'unpack', 'paradigm shift', 'robust', 'seamless', 'crucial', 'in today's fast-paced', 'at the heart of', 'game changer'.",
-            "- Aim for 1200-1800 words. It should feel like a real Under The Hood deep dive, not a short note.",
-            "- Use enough sections, examples, and caveats to make the mechanism useful, but do not pad.",
-            "- The goal is a useful human first draft, not a finished encyclopedia entry.",
+            ...draftVoiceRules,
             "Do not duplicate the titles or angles in the already-published posts.",
             "",
             "Topic:",
@@ -982,7 +987,7 @@ async function ensureCoverImage(postId: string) {
   return coverImageUrl;
 }
 
-async function ensureDevToDraft(postId: string) {
+export async function ensureDevToDraft(postId: string) {
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -1055,7 +1060,7 @@ async function ensureDevToDraft(postId: string) {
   }
 }
 
-async function ensurePromotionAssets(postId: string) {
+export async function ensurePromotionAssets(postId: string) {
   const post = await db.post.findUnique({
     where: {
       id: postId,

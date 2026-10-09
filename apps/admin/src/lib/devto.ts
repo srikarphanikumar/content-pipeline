@@ -87,6 +87,29 @@ export async function createDevToDraft(post: Post) {
   return (await response.json()) as DevToArticleResponse;
 }
 
+// Keeps an unpublished dev.to draft in sync after the post body changes. Recreates the draft
+// if it was deleted on dev.to, same as publishDevToArticle does.
+export async function updateDevToDraft(post: Post, articleId: string) {
+  const response = await fetch(`https://dev.to/api/articles/${articleId}`, {
+    method: "PUT",
+    headers: devToHeaders(),
+    body: JSON.stringify({
+      article: buildDevToArticle(post),
+    }),
+  });
+
+  if (response.status === 404) {
+    return createDevToDraft(post);
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`dev.to update returned ${response.status}: ${errorText}`);
+  }
+
+  return (await response.json()) as DevToArticleResponse;
+}
+
 export async function publishDevToArticle(post: Post, articleId?: string | null) {
   const response = await fetch(
     articleId ? `https://dev.to/api/articles/${articleId}` : "https://dev.to/api/articles",

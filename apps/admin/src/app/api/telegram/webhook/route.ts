@@ -33,6 +33,7 @@ const callbackToasts: Record<BotAction, string> = {
   draft: "Drafting…",
   improve: "Tell me what to change.",
   reject: "Rejecting…",
+  retry: "Retrying failed platforms…",
   skip: "Finding another topic…",
 };
 
@@ -113,7 +114,8 @@ export async function POST(request: Request) {
       return ok();
     }
 
-    const command = text.match(/^\/(\w+)(?:@\w+)?/)?.[1]?.toLowerCase();
+    const commandMatch = text.match(/^\/(\w+)(?:@\w+)?/);
+    const command = commandMatch?.[1]?.toLowerCase();
 
     if (command === "polish" || !command) {
       await inngest.send({
@@ -131,7 +133,9 @@ export async function POST(request: Request) {
 
     await inngest.send({
       data: {
+        args: text.slice(commandMatch?.[0].length ?? 0).trim(),
         command,
+        messageId: message.message_id,
       },
       id: eventId,
       name: "telegram/command.received",

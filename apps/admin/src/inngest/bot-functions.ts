@@ -4,12 +4,12 @@ import {
   preparePostAssetsForReview,
 } from "@/app/topics/pipeline";
 import {
-  adminPostUrl,
   approvalCardMessageIds,
   botHelpText,
+  draftNowKeyboard,
   findCardPost,
   findPendingImprovePrompt,
-  publicationResultLines,
+  publishResultCard,
   sendApprovalCard,
   sendBotMessage,
   sendNextForReview,
@@ -24,9 +24,15 @@ import {
   publicationResults,
   queueStatuses,
   rejectPost,
+  retryFailedPlatforms,
   syncDraftAssetsAfterEdit,
 } from "@/lib/post-workflow";
-import { clearTelegramKeyboard, editTelegramMessage, escapeHtml } from "@/lib/telegram";
+import {
+  clearTelegramKeyboard,
+  editTelegramMessage,
+  escapeHtml,
+  truncateText,
+} from "@/lib/telegram";
 import { isActiveTopicStatus } from "@/lib/topic-status";
 import { inngest } from "./client";
 
@@ -45,7 +51,9 @@ type FeedbackReceivedData = {
 };
 
 type CommandReceivedData = {
+  args?: string;
   command: string;
+  messageId?: number;
 };
 
 const actionLabels: Record<BotAction, string> = {
@@ -53,6 +61,7 @@ const actionLabels: Record<BotAction, string> = {
   draft: "Draft",
   improve: "Improve",
   reject: "Reject",
+  retry: "Retry",
   skip: "Skip",
 };
 
@@ -105,6 +114,56 @@ export const telegramButtonTapped = inngest.createFunction(
     const { action, messageId, targetId } = event.data as ButtonTappedData;
 
     try {
+      if (action === "retry") {
+        const state = await step.run("Check failed platforms", async () => {
+          const post = await findCardPost(targetId);
+
+          if (!post) {
+            return null;
+          }
+
+          const results = await publicationResults(targetId);
+
+          return {
+            failedCount: results.filter((result) => result.status === "FAILED").length,
+            id: post.id,
+            title: post.title,
+          };
+        });
+
+        if (!state || state.failedCount === 0) {
+          await step.run("Retire stale card", async () =>
+            retireStaleCard(
+              messageId,
+              state ? `Nothing left to retry for “${state.title}”.` : "That post no longer exists.",
+            ),
+          );
+
+          return { action, skipped: "stale" };
+        }
+
+        await step.run("Mark card as retrying", async () =>
+          editTelegramMessage({
+            messageId,
+            text: `⏳ ${bold("Retrying failed platforms…")}\n\n${bold(state.title)}`,
+          }),
+        );
+        await step.run("Retry failed platforms", async () => retryFailedPlatforms(state.id));
+
+        const results = await step.run("Read publish results", async () =>
+          publicationResults(state.id),
+        );
+
+        await step.run("Show publish results", async () =>
+          editTelegramMessage({
+            messageId,
+            ...publishResultCard(state, results, `🔁 ${bold("Retried")}`),
+          }),
+        );
+
+        return { action, postId: state.id };
+      }
+
       if (action === "approve" || action === "improve" || action === "reject") {
         const post = await step.run("Check post state", async () => findCardPost(targetId));
         const allowedStatuses = action === "approve" ? approvableStatuses : queueStatuses;
@@ -139,15 +198,7 @@ export const telegramButtonTapped = inngest.createFunction(
           await step.run("Show publish results", async () =>
             editTelegramMessage({
               messageId,
-              text: [
-                `🚀 ${bold("Approved")}`,
-                "",
-                bold(post.title),
-                "",
-                ...publicationResultLines(results),
-                "",
-                `<a href="${adminPostUrl(post.id)}">Open in pipeline</a>`,
-              ].join("\n"),
+              ...publishResultCard(post, results, `🚀 ${bold("Approved")}`),
             }),
           );
 
@@ -401,7 +452,78 @@ export const telegramCommandReceived = inngest.createFunction(
     triggers: [{ event: "telegram/command.received" }],
   },
   async ({ event, step }) => {
-    const { command } = event.data as CommandReceivedData;
+    const { args = "", command, messageId } = event.data as CommandReceivedData;
+
+    if (command === "idea") {
+      const [firstLine = "", ...rest] = args.split("\n");
+      const title = truncateText(firstLine, 200);
+      const description = rest.join("\n").trim() || null;
+
+      if (!title) {
+        return step.run("Explain idea usage", async () =>
+          sendBotMessage({
+            kind: "BOT_REPLY",
+            replyToMessageId: messageId,
+            text: [
+              "Send the topic after the command:",
+              "",
+              "<code>/idea Why React keys break animations</code>",
+              "",
+              "Extra lines become the topic description.",
+            ].join("\n"),
+          }),
+        );
+      }
+
+      const topic = await step.run("Add topic", async () => {
+        const existing = await db.topic.findFirst({
+          where: {
+            title: {
+              equals: title,
+              mode: "insensitive",
+            },
+          },
+          select: {
+            id: true,
+            status: true,
+            title: true,
+          },
+        });
+
+        if (existing) {
+          return { ...existing, created: false };
+        }
+
+        // Selected, not backlog: your own ideas skip triage. With no audienceFit score they also
+        // sort ahead of generated topics in the draft buffer (NULLs first in a DESC sort).
+        const created = await db.topic.create({
+          data: {
+            description,
+            status: "selected",
+            title,
+          },
+          select: {
+            id: true,
+            status: true,
+            title: true,
+          },
+        });
+
+        return { ...created, created: true };
+      });
+
+      return step.run("Confirm idea", async () =>
+        sendBotMessage({
+          keyboard: isActiveTopicStatus(topic.status) ? draftNowKeyboard(topic.id) : undefined,
+          kind: "BOT_REPLY",
+          replyToMessageId: messageId,
+          text: topic.created
+            ? `💡 Added to selected topics: ${bold(topic.title)}\n\nThe morning draft buffer will pick it up, or draft it now.`
+            : `💡 That topic already exists (${escapeHtml(topic.status)}): ${bold(topic.title)}`,
+          topicId: topic.id,
+        }),
+      );
+    }
 
     if (command === "next") {
       return step.run("Send next for review", async () => sendNextForReview());

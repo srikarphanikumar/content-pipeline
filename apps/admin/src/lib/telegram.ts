@@ -226,6 +226,10 @@ export async function setTelegramCommands() {
         command: "next",
         description: "Show the next post waiting for approval",
       },
+      {
+        command: "idea",
+        description: "Add a topic to draft: /idea <topic>",
+      },
     ],
   });
 }

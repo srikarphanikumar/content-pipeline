@@ -10,6 +10,7 @@ import {
 } from "@/app/topics/pipeline";
 import { publishBlueskyPost } from "@/lib/bluesky";
 import { publishDevToArticle, updateDevToDraft } from "@/lib/devto";
+import { hashnodeConfigured, publishHashnodePost } from "@/lib/hashnode";
 import { publishLinkedInPost } from "@/lib/linkedin";
 import { sendPostToActiveSubscribers } from "@/lib/newsletter-send";
 
@@ -276,6 +277,45 @@ export async function publishDevToSyndicationForPost(postId: string) {
   }
 }
 
+export async function publishHashnodeSyndicationForPost(postId: string) {
+  const [post, existingPublication] = await Promise.all([
+    db.post.findUnique({
+      where: {
+        id: postId,
+      },
+    }),
+    db.platformPublication.findUnique({
+      where: {
+        postId_platform: {
+          postId,
+          platform: "HASHNODE",
+        },
+      },
+    }),
+  ]);
+
+  if (!post) {
+    throw new Error("Post not found.");
+  }
+
+  const publication = await startPlatformPublication(postId, "HASHNODE");
+
+  try {
+    const result = await publishHashnodePost(post, existingPublication?.externalId);
+
+    await markPlatformPublicationPublished(publication.id, {
+      externalId: result.id,
+      externalUrl: result.url || existingPublication?.externalUrl || null,
+    });
+  } catch (error) {
+    await markPlatformPublicationFailed(publication.id, error);
+    throw error;
+  }
+
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${postId}`);
+}
+
 export async function publishLinkedInPromotionForPost(postId: string) {
   const [post, linkedInPost, connection] = await Promise.all([
     db.post.findUnique({
@@ -424,6 +464,13 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
     tasks.push({
       platform: "DEVTO",
       run: () => publishDevToSyndicationForPost(postId),
+    });
+  }
+
+  if (hashnodeConfigured() && publications.get("HASHNODE") !== "PUBLISHED") {
+    tasks.push({
+      platform: "HASHNODE",
+      run: () => publishHashnodeSyndicationForPost(postId),
     });
   }
 
@@ -755,7 +802,7 @@ export async function publicationResults(postId: string) {
     where: {
       postId,
       platform: {
-        in: ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"],
+        in: ["BLOG", "DEVTO", "HASHNODE", "LINKEDIN", "BLUESKY"],
       },
     },
     select: {
@@ -770,6 +817,7 @@ export async function publicationResults(postId: string) {
 const retryablePlatforms = {
   BLUESKY: publishBlueskyPromotionForPost,
   DEVTO: publishDevToSyndicationForPost,
+  HASHNODE: publishHashnodeSyndicationForPost,
   LINKEDIN: publishLinkedInPromotionForPost,
 } as const;
 

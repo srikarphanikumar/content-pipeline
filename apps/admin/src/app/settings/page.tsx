@@ -1,6 +1,7 @@
 import { db, formatDate } from "@content-pipeline/db";
 import { AdminShell } from "../components/AdminShell";
 import { SubmitButton } from "../components/SubmitButton";
+import { hashnodeConfigured } from "@/lib/hashnode";
 import { pipelineBaseUrl } from "@/lib/pipeline-bot";
 import { getTelegramWebhookInfo, telegramConfigured } from "@/lib/telegram";
 import { registerTelegramWebhook, sendTestTelegramMessage } from "./actions";
@@ -97,6 +98,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const blueskyHandle = process.env.BLUESKY_HANDLE;
   const blueskyConfigured = Boolean(blueskyHandle && process.env.BLUESKY_APP_PASSWORD);
   const devToConfigured = Boolean(process.env.DEVTO_API_KEY);
+  const hashnodeReady = hashnodeConfigured();
   const openAiConfigured = Boolean(process.env.OPENAI_API_KEY);
   const telegramReady = telegramConfigured();
   const [{ deliveries: telegramDeliveries, error: telegramDeliveryError }, webhook] =
@@ -147,11 +149,22 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       action: null,
     },
     {
+      title: "Hashnode",
+      eyebrow: "Personal access token",
+      status: hashnodeReady ? "Ready" : "Missing env vars",
+      tone: hashnodeReady ? "ready" : "warning",
+      detail: hashnodeReady
+        ? "Publishes to your Hashnode blog with canonical links back to the blog."
+        : "Set HASHNODE_TOKEN and HASHNODE_PUBLICATION_ID.",
+      meta: "Runs with Approve & publish, alongside dev.to.",
+      action: null,
+    },
+    {
       title: "OpenAI",
       eyebrow: "Generation",
       status: openAiConfigured ? "Ready" : "Missing API key",
       tone: openAiConfigured ? "ready" : "warning",
-      detail: "Generates LinkedIn and Bluesky promotion copy.",
+      detail: "Generates promotion copy and hand-drawn cover images.",
       meta: "Used server-side only.",
       action: null,
     },

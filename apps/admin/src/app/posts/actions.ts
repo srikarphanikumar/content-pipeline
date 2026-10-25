@@ -370,6 +370,11 @@ export async function publishDevToSyndicationForPost(postId: string) {
   await workflow.publishDevToSyndicationForPost(postId);
 }
 
+export async function publishHashnodeSyndicationForPost(postId: string) {
+  await requireAdmin();
+  await workflow.publishHashnodeSyndicationForPost(postId);
+}
+
 export async function generatePromotionAssetsForPost(postId: string) {
   await requireAdmin();
 

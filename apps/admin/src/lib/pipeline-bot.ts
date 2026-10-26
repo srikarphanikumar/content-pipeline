@@ -1,7 +1,6 @@
 import { db } from "@content-pipeline/db";
 import type { NotificationKind } from "@content-pipeline/db";
 import { approvableStatuses } from "@/lib/post-workflow";
-import { hashnodeConfigured } from "@/lib/hashnode";
 import {
   escapeHtml,
   sendTelegramMessage,
@@ -400,16 +399,8 @@ const platformLabels: Record<string, string> = {
   BLOG: "Blog",
   BLUESKY: "Bluesky",
   DEVTO: "dev.to",
-  HASHNODE: "Hashnode",
   LINKEDIN: "LinkedIn",
 };
-
-// Hashnode is optional; leave it off the cards until its credentials are set.
-function cardPlatforms() {
-  return hashnodeConfigured()
-    ? ["BLOG", "DEVTO", "HASHNODE", "LINKEDIN", "BLUESKY"]
-    : ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"];
-}
 
 type PublicationResult = {
   errorMessage: string | null;
@@ -423,7 +414,7 @@ export function publishResultCard(
   results: PublicationResult[],
   heading: string,
 ): { keyboard?: InlineKeyboard; text: string } {
-  const failed = cardPlatforms().filter((platform) =>
+  const failed = ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"].filter((platform) =>
     results.some((result) => result.platform === platform && result.status === "FAILED"),
   );
 
@@ -489,7 +480,7 @@ export async function credentialWarnings(options: { withinDays: number }) {
 }
 
 export function publicationResultLines(publications: PublicationResult[]) {
-  return cardPlatforms().map((platform) => {
+  return ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"].map((platform) => {
     const publication = publications.find((item) => item.platform === platform);
     const label = platformLabels[platform];
 

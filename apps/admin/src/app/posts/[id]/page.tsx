@@ -5,7 +5,6 @@ import { AdminShell, SecondaryLink } from "../../components/AdminShell";
 import { CopyButton } from "../../components/CopyButton";
 import { SubmitButton } from "../../components/SubmitButton";
 import { PostForm } from "../PostForm";
-import { hashnodeConfigured } from "@/lib/hashnode";
 import {
   approveAndPublishPost,
   createDevToDraftForPost,
@@ -16,7 +15,6 @@ import {
   publishBlogCanonicalPost,
   publishBlueskyPromotionForPost,
   publishDevToSyndicationForPost,
-  publishHashnodeSyndicationForPost,
   publishLinkedInPromotionForPost,
   schedulePostForTomorrow,
   publishSyndicationAndSocialsForPost,
@@ -61,7 +59,6 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const prepareForReviewAction = preparePostForReview.bind(null, post.id);
   const publishSocialsAction = publishSyndicationAndSocialsForPost.bind(null, post.id);
   const publishDevToAction = publishDevToSyndicationForPost.bind(null, post.id);
-  const publishHashnodeAction = publishHashnodeSyndicationForPost.bind(null, post.id);
   const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
   const publishBlueskyAction = publishBlueskyPromotionForPost.bind(null, post.id);
   const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
@@ -71,9 +68,6 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   );
   const devToPublication = post.publications.find(
     (publication) => publication.platform === "DEVTO",
-  );
-  const hashnodePublication = post.publications.find(
-    (publication) => publication.platform === "HASHNODE",
   );
   const linkedInPublication = post.publications.find(
     (publication) => publication.platform === "LINKEDIN",
@@ -489,61 +483,6 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
             </div>
           </section>
         </div>
-
-        {hashnodeConfigured() ? (
-          <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
-            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-                  Hashnode
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">
-                  Syndication
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-zinc-400">
-                  Publishes to your Hashnode blog with the canonical link, CTA,
-                  and cover image. Publishing again updates the same post.
-                </p>
-              </div>
-              <span className="w-fit rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
-                {hashnodePublication?.status || "NOT_STARTED"}
-              </span>
-            </div>
-            {hashnodePublication?.errorMessage ? (
-              <p className="mt-4 rounded-md bg-red-500/10 p-3 text-sm text-red-300">
-                {hashnodePublication.errorMessage}
-              </p>
-            ) : null}
-            <div className="mt-5 flex flex-wrap gap-2">
-              {hashnodePublication?.externalUrl ? (
-                <a
-                  className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
-                  href={hashnodePublication.externalUrl}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Open on Hashnode
-                </a>
-              ) : null}
-              {isBlogPublished ? (
-                <form action={publishHashnodeAction}>
-                  <SubmitButton
-                    className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                    pendingLabel="Publishing..."
-                  >
-                    {hashnodePublication?.status === "PUBLISHED"
-                      ? "Update on Hashnode"
-                      : "Publish to Hashnode"}
-                  </SubmitButton>
-                </form>
-              ) : (
-                <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-400">
-                  Publish the blog post first
-                </span>
-              )}
-            </div>
-          </section>
-        ) : null}
 
         <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">

@@ -64,8 +64,6 @@ OPENAI_API_KEY
 OPENAI_IMAGE_MODEL              optional, defaults to gpt-image-2
 OPENAI_IMAGE_SIZE               optional, defaults to 1536x1024
 BLOB_READ_WRITE_TOKEN           Vercel Blob token for generated cover images
-HASHNODE_TOKEN                  optional, Hashnode personal access token
-HASHNODE_PUBLICATION_ID         optional, ID of the Hashnode blog to publish to
 LINKEDIN_CLIENT_ID
 LINKEDIN_CLIENT_SECRET
 LINKEDIN_REDIRECT_URI

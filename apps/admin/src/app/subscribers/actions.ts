@@ -96,3 +96,12 @@ export async function sendLatestPostToActiveSubscribers() {
   revalidatePath("/subscribers");
   redirect(result.status === "SENT" ? "/subscribers?email=sent-post" : "/subscribers?email=partial");
 }
+
+// Picks up where a partial or failed newsletter send for this post stopped.
+export async function continueNewsletterForPost(postId: string) {
+  await requireAdmin();
+  await sendPostToActiveSubscribers(postId);
+
+  revalidatePath("/");
+  revalidatePath("/subscribers");
+}

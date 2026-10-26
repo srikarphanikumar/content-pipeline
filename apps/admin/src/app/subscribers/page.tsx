@@ -1,8 +1,20 @@
-import Link from "next/link";
 import { db, formatDate } from "@content-pipeline/db";
 import type { SubscriberStatus } from "@content-pipeline/db";
 import { AdminShell } from "../components/AdminShell";
+import { Menu } from "../components/Menu";
 import { SubmitButton } from "../components/SubmitButton";
+import {
+  Card,
+  EmptyState,
+  Notice,
+  StatusPill,
+  Tabs,
+  buttonClass,
+  menuDangerItemClass,
+  menuItemClass,
+  relativeTime,
+  type PillTone,
+} from "../components/ui";
 import {
   sendAdminTestNewsletterEmail,
   sendLatestPostToActiveSubscribers,
@@ -27,11 +39,11 @@ const statusLabels: Record<SubscriberStatus | "ALL", string> = {
   BOUNCED: "Bounced",
 };
 
-const statusStyles: Record<SubscriberStatus, string> = {
-  ACTIVE: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
-  PENDING: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
-  UNSUBSCRIBED: "bg-white/10 text-zinc-300 ring-white/10",
-  BOUNCED: "bg-red-500/15 text-red-300 ring-red-400/30",
+const statusTones: Record<SubscriberStatus, PillTone> = {
+  ACTIVE: "live",
+  PENDING: "pending",
+  UNSUBSCRIBED: "idle",
+  BOUNCED: "failed",
 };
 
 type SubscribersPageProps = {
@@ -137,213 +149,142 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
   );
   const totalCount = counts.reduce((total, count) => total + count._count.status, 0);
 
+  const deliveryTone = (status: string): PillTone =>
+    status === "SENT" ? "live" : status === "PARTIAL" ? "pending" : status === "SKIPPED" ? "idle" : "failed";
+
   return (
     <AdminShell
-      description="Review confirmed readers, pending confirmations, unsubscribe state, and acquisition source."
-      eyebrow="Audience"
-      title="Subscribers"
-    >
-      {email ? (
-        <div className="mb-6 rounded-lg border border-orange-400/30 bg-orange-500/10 p-4 text-sm text-orange-200">
-          {emailMessages[email] || `Newsletter action finished: ${email}`}
-        </div>
-      ) : null}
-
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {statuses.map((item) => {
-          const href = item === "ALL" ? "/subscribers" : `/subscribers?status=${item}`;
-          const count = item === "ALL" ? totalCount : countMap.get(item) || 0;
-          const selected = item === "ALL" ? !selectedStatus : selectedStatus === item;
-
-          return (
-            <Link
-              className={`rounded-lg border p-4 transition ${
-                selected
-                  ? "border-orange-400 bg-orange-500 text-black"
-                  : "border-white/10 bg-[#141414] text-zinc-300 hover:border-orange-400"
-              }`}
-              href={href}
-              key={item}
-            >
-              <p className="text-sm font-semibold">{statusLabels[item]}</p>
-              <p className="mt-2 text-2xl font-semibold">{count}</p>
-            </Link>
-          );
-        })}
-      </section>
-
-      <section className="mt-6 rounded-lg border border-white/10 bg-[#141414] p-5">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-              Newsletter sending
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
-              Send and test subscriber email
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-400">
-              {latestPost
-                ? `Test preview uses: ${latestPost.title} (${latestPost.status.replaceAll("_", " ")}).`
-                : "No ready or published owned post is available yet."}
-              {" "}
-              {latestPublishedPost
-                ? `Subscriber send uses latest public post: ${latestPublishedPost.title}.`
-                : "Subscriber send waits until an owned post is public."}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <form action={sendAdminTestNewsletterEmail}>
-              <SubmitButton pendingLabel="Sending test...">
-                Send admin test email
-              </SubmitButton>
-            </form>
+      actions={
+        <>
+          {latestPublishedPost ? (
             <form action={sendLatestPostToActiveSubscribers}>
               <SubmitButton
-                className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                pendingLabel="Sending post..."
+                confirm={`Email "${latestPublishedPost.title}" to every active reader who hasn't had it yet?`}
+                pendingLabel="Sending..."
+                variant="secondary"
               >
                 Send latest post
               </SubmitButton>
             </form>
-          </div>
-        </div>
-      </section>
+          ) : null}
+          <Menu label="⋯" triggerClassName={buttonClass("secondary")}>
+            <form action={sendAdminTestNewsletterEmail}>
+              <SubmitButton className={menuItemClass} pendingLabel="Sending test...">
+                Send me a test email
+              </SubmitButton>
+            </form>
+          </Menu>
+        </>
+      }
+      description={
+        latestPublishedPost
+          ? `"Send latest post" emails ${latestPublishedPost.title}. The test email previews ${latestPost?.title || "the same post"}.`
+          : "Newsletter sends unlock once a pipeline post is live."
+      }
+      title="Readers"
+    >
+      {email ? <Notice>{emailMessages[email] || `Newsletter action finished: ${email}`}</Notice> : null}
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
-        <div className="border-b border-white/10 p-5">
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-            Delivery log
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">Recent email sends</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-white/10 text-sm">
-            <thead className="bg-black/40 text-left text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              <tr>
-                <th className="px-5 py-3">Time</th>
-                <th className="px-5 py-3">Kind</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Post</th>
-                <th className="px-5 py-3">Recipients</th>
-                <th className="px-5 py-3">Error</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/10">
-              {emailDeliveries.length > 0 ? (
-                emailDeliveries.map((delivery) => (
-                  <tr className="text-zinc-300" key={delivery.id}>
-                    <td className="px-5 py-4 align-top">{formatDate(delivery.createdAt)}</td>
-                    <td className="px-5 py-4 align-top">{delivery.kind}</td>
-                    <td className="px-5 py-4 align-top">
-                      <span
-                        className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                          delivery.status === "SENT"
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : delivery.status === "PARTIAL"
-                              ? "bg-amber-500/15 text-amber-300"
-                              : "bg-red-500/15 text-red-300"
-                        }`}
-                      >
-                        {delivery.status}
-                      </span>
-                    </td>
-                    <td className="max-w-xs px-5 py-4 align-top text-white">
-                      {delivery.post?.title || "-"}
-                    </td>
-                    <td className="px-5 py-4 align-top">
-                      {delivery.recipient || delivery.recipientCount}
-                    </td>
-                    <td className="max-w-md px-5 py-4 align-top text-zinc-400">
-                      {delivery.errorMessage || "-"}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className="px-5 py-6 text-center text-zinc-500" colSpan={6}>
-                    No email sends recorded yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="mt-6 overflow-hidden rounded-lg border border-white/10 bg-[#141414]">
-        {subscribers.length === 0 ? (
-          <div className="p-8 text-zinc-400">
-            No subscribers match this view yet.
-          </div>
+      <Card title="Recent sends">
+        {emailDeliveries.length > 0 ? (
+          <ul className="-mx-5 -my-2 divide-y divide-line">
+            {emailDeliveries.map((delivery) => (
+              <li className="flex items-start gap-3 px-5 py-2.5 text-sm" key={delivery.id}>
+                <span className="w-24 shrink-0">
+                  <StatusPill tone={deliveryTone(delivery.status)}>{delivery.status.toLowerCase()}</StatusPill>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-white">
+                    {delivery.kind === "TEST" ? "Test · " : ""}
+                    {delivery.post?.title || delivery.subject}
+                  </p>
+                  {delivery.errorMessage ? (
+                    <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{delivery.errorMessage}</p>
+                  ) : null}
+                </div>
+                <span className="shrink-0 text-right text-xs text-zinc-500">
+                  {delivery.recipient || `${delivery.recipientCount} sent`}
+                  <br />
+                  {relativeTime(delivery.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-white/10 text-sm">
-              <thead className="bg-black/40 text-left text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                <tr>
-                  <th className="px-5 py-3">Subscriber</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Source</th>
-                  <th className="px-5 py-3">Created</th>
-                  <th className="px-5 py-3">Confirmed</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                {subscribers.map((subscriber) => (
-                  <tr className="text-zinc-300" key={subscriber.id}>
-                    <td className="px-5 py-4 align-top">
-                      <p className="font-semibold text-white">{subscriber.email}</p>
-                      {subscriber.referrerUrl ? (
-                        <p className="mt-1 max-w-sm truncate text-xs text-zinc-500">
-                          {subscriber.referrerUrl}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-5 py-4 align-top">
-                      <span
-                        className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ring-1 ring-inset ${statusStyles[subscriber.status]}`}
-                      >
-                        {statusLabels[subscriber.status]}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 align-top">{subscriber.source || "Unknown"}</td>
-                    <td className="px-5 py-4 align-top">{formatDate(subscriber.createdAt)}</td>
-                    <td className="px-5 py-4 align-top">
-                      {subscriber.confirmedAt ? formatDate(subscriber.confirmedAt) : "Not yet"}
-                    </td>
-                    <td className="px-5 py-4 align-top">
-                      <div className="flex justify-end gap-2">
-                        {subscriber.status !== "ACTIVE" ? (
-                          <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
-                            <input name="status" type="hidden" value="ACTIVE" />
-                            <SubmitButton
-                              className="inline-flex h-9 items-center rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300"
-                              pendingLabel="Activating..."
-                            >
-                              Activate
-                            </SubmitButton>
-                          </form>
-                        ) : null}
-                        {subscriber.status !== "UNSUBSCRIBED" ? (
-                          <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
-                            <input name="status" type="hidden" value="UNSUBSCRIBED" />
-                            <SubmitButton
-                              className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-semibold text-black"
-                              pendingLabel="Updating..."
-                            >
-                              Unsubscribe
-                            </SubmitButton>
-                          </form>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="text-sm text-zinc-500">No email sends recorded yet.</p>
         )}
-      </section>
+      </Card>
+
+      <div className="mt-8">
+        <Tabs
+          items={statuses.map((item) => ({
+            active: item === "ALL" ? !selectedStatus : selectedStatus === item,
+            count: item === "ALL" ? totalCount : countMap.get(item) || 0,
+            href: item === "ALL" ? "/subscribers" : `/subscribers?status=${item}`,
+            label: statusLabels[item],
+          }))}
+        />
+        <div className="pt-4">
+          {subscribers.length === 0 ? (
+            <EmptyState title="No readers in this view" />
+          ) : (
+            <div className="rounded-xl border border-line bg-surface">
+              <table className="min-w-full text-sm">
+                <thead className="border-b border-line text-left text-xs text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Reader</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="hidden px-4 py-2.5 font-medium md:table-cell">Source</th>
+                    <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Joined</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {subscribers.map((subscriber) => (
+                    <tr className="text-zinc-300" key={subscriber.id}>
+                      <td className="max-w-xs px-4 py-2.5">
+                        <p className="truncate font-medium text-white">{subscriber.email}</p>
+                        {subscriber.referrerUrl ? (
+                          <p className="truncate text-xs text-zinc-500">{subscriber.referrerUrl}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <StatusPill tone={statusTones[subscriber.status]}>{statusLabels[subscriber.status]}</StatusPill>
+                      </td>
+                      <td className="hidden px-4 py-2.5 text-zinc-400 md:table-cell">{subscriber.source || "—"}</td>
+                      <td className="hidden px-4 py-2.5 text-zinc-400 sm:table-cell">{formatDate(subscriber.createdAt)}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <Menu label="⋯" triggerClassName={buttonClass("ghost", "sm")}>
+                          {subscriber.status !== "ACTIVE" ? (
+                            <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
+                              <input name="status" type="hidden" value="ACTIVE" />
+                              <SubmitButton className={menuItemClass} pendingLabel="Activating...">
+                                Mark active
+                              </SubmitButton>
+                            </form>
+                          ) : null}
+                          {subscriber.status !== "UNSUBSCRIBED" ? (
+                            <form action={updateSubscriberStatus.bind(null, subscriber.id)}>
+                              <input name="status" type="hidden" value="UNSUBSCRIBED" />
+                              <SubmitButton
+                                className={menuDangerItemClass}
+                                confirm={`Unsubscribe ${subscriber.email}?`}
+                                pendingLabel="Updating..."
+                              >
+                                Unsubscribe
+                              </SubmitButton>
+                            </form>
+                          ) : null}
+                        </Menu>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </AdminShell>
   );
 }

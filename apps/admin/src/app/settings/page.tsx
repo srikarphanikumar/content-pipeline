@@ -151,7 +151,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       eyebrow: "Generation",
       status: openAiConfigured ? "Ready" : "Missing API key",
       tone: openAiConfigured ? "ready" : "warning",
-      detail: "Generates LinkedIn and Bluesky promotion copy.",
+      detail: "Generates promotion copy and hand-drawn cover images.",
       meta: "Used server-side only.",
       action: null,
     },
@@ -188,7 +188,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   return (
     <AdminShell
       description="Review provider connections and server-side credentials used by syndication, promotion, and generation workflows."
-      eyebrow="Configuration"
       title="Settings"
     >
       {message ? (

@@ -1,24 +1,40 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@content-pipeline/db";
-import { AdminShell, SecondaryLink } from "../../components/AdminShell";
+import type { Platform, PlatformPublication } from "@content-pipeline/db";
+import { AdminShell } from "../../components/AdminShell";
 import { CopyButton } from "../../components/CopyButton";
+import { Menu } from "../../components/Menu";
+import { postStatusDisplay } from "../../components/post-status";
 import { SubmitButton } from "../../components/SubmitButton";
+import {
+  Card,
+  StatusDot,
+  StatusPill,
+  Tabs,
+  buttonClass,
+  menuDangerItemClass,
+  menuItemClass,
+  relativeTime,
+  type PillTone,
+} from "../../components/ui";
 import { PostForm } from "../PostForm";
 import {
   approveAndPublishPost,
   createDevToDraftForPost,
   deletePipelinePost,
   generateCoverImageForPost,
-  preparePostForReview,
   generatePromotionAssetsForPost,
+  preparePostForReview,
   publishBlogCanonicalPost,
   publishBlueskyPromotionForPost,
   publishDevToSyndicationForPost,
   publishLinkedInPromotionForPost,
-  schedulePostForTomorrow,
   publishSyndicationAndSocialsForPost,
   recreateDevToDraftForPost,
+  retryFailedPlatformsForPost,
+  schedulePostForTomorrow,
   updatePost,
   updatePromotionAssetsForPost,
 } from "../actions";
@@ -29,10 +45,34 @@ type EditPostPageProps = {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{
+    tab?: string;
+  }>;
 };
 
-export default async function EditPostPage({ params }: EditPostPageProps) {
-  const { id } = await params;
+const promoFields = [
+  { label: "LinkedIn post", limit: 3000, name: "linkedInPost", rows: 12, type: "LINKEDIN_POST" },
+  { label: "LinkedIn first comment", limit: 1250, name: "linkedInFirstComment", rows: 4, type: "LINKEDIN_FIRST_COMMENT" },
+  { label: "Bluesky post", limit: 300, name: "blueskyPost", rows: 4, type: "BLUESKY_POST" },
+] as const;
+
+function publicationState(publication: PlatformPublication | undefined): { label: string; tone: PillTone } {
+  switch (publication?.status) {
+    case "PUBLISHED":
+      return { label: "Live", tone: "live" };
+    case "FAILED":
+      return { label: "Failed", tone: "failed" };
+    case "SCHEDULED":
+      return { label: `Scheduled ${relativeTime(publication.scheduledAt)}`, tone: "info" };
+    case "GENERATED":
+      return { label: "Draft created", tone: "pending" };
+    default:
+      return { label: "Not started", tone: "idle" };
+  }
+}
+
+export default async function EditPostPage({ params, searchParams }: EditPostPageProps) {
+  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   const post = await db.post.findUnique({
     where: {
       id,
@@ -47,627 +87,353 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
     notFound();
   }
 
-  const updateAction = updatePost.bind(null, post.id);
-  const deleteAction = deletePipelinePost.bind(null, post.id);
-  const approveAndPublishAction = approveAndPublishPost.bind(null, post.id);
-  const createDevToDraftAction = createDevToDraftForPost.bind(null, post.id);
-  const recreateDevToDraftAction = recreateDevToDraftForPost.bind(null, post.id);
-  const generateCoverImageAction = generateCoverImageForPost.bind(null, post.id);
-  const publishBlogAction = publishBlogCanonicalPost.bind(null, post.id);
-  const scheduleTomorrowAction = schedulePostForTomorrow.bind(null, post.id);
-  const generatePromotionAction = generatePromotionAssetsForPost.bind(null, post.id);
-  const prepareForReviewAction = preparePostForReview.bind(null, post.id);
-  const publishSocialsAction = publishSyndicationAndSocialsForPost.bind(null, post.id);
-  const publishDevToAction = publishDevToSyndicationForPost.bind(null, post.id);
-  const publishLinkedInAction = publishLinkedInPromotionForPost.bind(null, post.id);
-  const publishBlueskyAction = publishBlueskyPromotionForPost.bind(null, post.id);
-  const updatePromotionAction = updatePromotionAssetsForPost.bind(null, post.id);
-  const publicUrl = `https://blog.mspk.me/posts/${post.slug}`;
-  const blogPublication = post.publications.find(
-    (publication) => publication.platform === "BLOG",
+  const publications = new Map<Platform, PlatformPublication>(
+    post.publications.map((publication) => [publication.platform, publication]),
   );
-  const devToPublication = post.publications.find(
-    (publication) => publication.platform === "DEVTO",
-  );
-  const linkedInPublication = post.publications.find(
-    (publication) => publication.platform === "LINKEDIN",
-  );
-  const blueskyPublication = post.publications.find(
-    (publication) => publication.platform === "BLUESKY",
-  );
-  const hasPublishedSocial =
-    linkedInPublication?.status === "PUBLISHED" ||
-    blueskyPublication?.status === "PUBLISHED" ||
-    devToPublication?.status === "PUBLISHED";
-  const promotionAssets = new Map(
-    post.promotionAssets.map((asset) => [asset.type, asset.content]),
-  );
-  const linkedInPost = promotionAssets.get("LINKEDIN_POST") || "";
-  const linkedInFirstComment = promotionAssets.get("LINKEDIN_FIRST_COMMENT") || "";
-  const blueskyPost = promotionAssets.get("BLUESKY_POST") || "";
-  const linkedInPostLimit = 3000;
-  const linkedInFirstCommentLimit = 1250;
-  const blueskyPostLimit = 300;
+  const blogPublication = publications.get("BLOG");
+  const devToPublication = publications.get("DEVTO");
+  const promotionAssets = new Map(post.promotionAssets.map((asset) => [asset.type, asset.content]));
   const hasPromotionAssets = post.promotionAssets.length > 0;
   const isProtectedImport = post.sourcePlatform === "SUBSTACK";
-  const isPipelineQueuePost = [
-    "IDEA",
-    "SELECTED",
-    "DRAFTING",
-    "DRAFT_READY",
-    "READY_TO_PUBLISH",
-  ].includes(post.status);
+  const isPipelineQueuePost = ["IDEA", "SELECTED", "DRAFTING", "DRAFT_READY", "READY_TO_PUBLISH"].includes(
+    post.status,
+  );
   const isBlogPublished =
     blogPublication?.status === "PUBLISHED" ||
-    [
-      "PUBLISHED_BLOG",
-      "PUBLISHED_DEVTO",
-      "PROMOTED_LINKEDIN",
-      "PROMOTED_SOCIAL",
-      "COMPLETE",
-    ].includes(post.status);
+    ["PUBLISHED_BLOG", "PUBLISHED_DEVTO", "PROMOTED_LINKEDIN", "PROMOTED_SOCIAL", "COMPLETE"].includes(
+      post.status,
+    );
+  const syndicationPlatforms: Platform[] = ["DEVTO", "LINKEDIN", "BLUESKY"];
+  const hasFailedSyndication = syndicationPlatforms.some(
+    (platform) => publications.get(platform)?.status === "FAILED",
+  );
   const isFullyPublished =
     post.status === "COMPLETE" ||
     (isBlogPublished &&
-      devToPublication?.status === "PUBLISHED" &&
-      linkedInPublication?.status === "PUBLISHED" &&
-      blueskyPublication?.status === "PUBLISHED");
-  const isBlogScheduled = blogPublication?.status === "SCHEDULED";
+      syndicationPlatforms.every((platform) => publications.get(platform)?.status === "PUBLISHED"));
   const needsReviewPrep =
     !isProtectedImport &&
     isPipelineQueuePost &&
     (!post.coverImageUrl || !hasPromotionAssets || !devToPublication?.externalId);
-  const routeSteps = [
+  const publicUrl = blogPublication?.externalUrl || post.canonicalUrl || `https://blog.mspk.me/posts/${post.slug}`;
+  const status = postStatusDisplay(post.status);
+  const activeTab = tab === "promo" ? "promo" : "article";
+
+  // One primary action, chosen by where the post is in its lifecycle.
+  let primaryAction: React.ReactNode = null;
+
+  if (isProtectedImport) {
+    primaryAction = null;
+  } else if (needsReviewPrep) {
+    primaryAction = (
+      <form action={preparePostForReview.bind(null, post.id)}>
+        <SubmitButton pendingLabel="Preparing cover, dev.to, socials...">Prepare for review</SubmitButton>
+      </form>
+    );
+  } else if (!isBlogPublished) {
+    primaryAction = (
+      <form action={approveAndPublishPost.bind(null, post.id)}>
+        <SubmitButton
+          confirm="Publish to the blog, dev.to and socials now?"
+          pendingLabel="Publishing..."
+          variant="success"
+        >
+          Approve & publish
+        </SubmitButton>
+      </form>
+    );
+  } else if (hasFailedSyndication) {
+    primaryAction = (
+      <form action={retryFailedPlatformsForPost.bind(null, post.id)}>
+        <SubmitButton pendingLabel="Retrying...">Retry failed</SubmitButton>
+      </form>
+    );
+  } else if (!isFullyPublished && hasPromotionAssets) {
+    primaryAction = (
+      <form action={publishSyndicationAndSocialsForPost.bind(null, post.id)}>
+        <SubmitButton pendingLabel="Posting...">Post to dev.to & socials</SubmitButton>
+      </form>
+    );
+  }
+
+  const platformRows: Array<{
+    action?: React.ReactNode;
+    error?: string | null;
+    label: string;
+    link?: string | null;
+    platform: Platform;
+  }> = [
     {
-      label: "Canonical",
-      detail: isBlogPublished
-        ? "Live on blog"
-        : post.bodyMarkdown.trim()
-          ? "Ready to publish"
-          : "Add post body",
-      done: isBlogPublished,
+      platform: "BLOG",
+      label: "Blog",
+      link: isBlogPublished ? publicUrl : null,
+      error: blogPublication?.errorMessage,
     },
     {
-      label: "Cover",
-      detail: post.coverImageUrl ? "Image ready" : "Generate image",
-      done: Boolean(post.coverImageUrl),
-    },
-    {
+      platform: "DEVTO",
       label: "dev.to",
-      detail:
-        devToPublication?.status === "PUBLISHED"
-          ? "Published"
-          : devToPublication?.externalId
-            ? "Draft created"
-            : "Create draft",
-      done: devToPublication?.status === "PUBLISHED" || Boolean(devToPublication?.externalId),
+      link: devToPublication?.externalUrl,
+      error: devToPublication?.errorMessage,
+      action: isProtectedImport ? null : isBlogPublished && devToPublication?.status !== "PUBLISHED" ? (
+        <form action={publishDevToSyndicationForPost.bind(null, post.id)}>
+          <SubmitButton pendingLabel="Publishing..." size="sm" variant="ghost">
+            Publish
+          </SubmitButton>
+        </form>
+      ) : !devToPublication?.externalId ? (
+        <form action={createDevToDraftForPost.bind(null, post.id)}>
+          <SubmitButton pendingLabel="Creating..." size="sm" variant="ghost">
+            Create draft
+          </SubmitButton>
+        </form>
+      ) : null,
     },
-    {
-      label: "Promo copy",
-      detail: hasPromotionAssets ? "Copy ready" : "Generate copy",
-      done: hasPromotionAssets,
-    },
-    {
-      label: "LinkedIn",
-      detail: linkedInPublication?.status === "PUBLISHED" ? "Posted" : "Not posted",
-      done: linkedInPublication?.status === "PUBLISHED",
-    },
-    {
-      label: "Bluesky",
-      detail: blueskyPublication?.status === "PUBLISHED" ? "Posted" : "Not posted",
-      done: blueskyPublication?.status === "PUBLISHED",
-    },
+    ...(["LINKEDIN", "BLUESKY"] as const).map((platform) => {
+      const publication = publications.get(platform);
+      const action = platform === "LINKEDIN" ? publishLinkedInPromotionForPost : publishBlueskyPromotionForPost;
+
+      return {
+        platform,
+        label: platform === "LINKEDIN" ? "LinkedIn" : "Bluesky",
+        link: publication?.externalUrl,
+        error: publication?.errorMessage,
+        action:
+          isBlogPublished && hasPromotionAssets && publication?.status !== "PUBLISHED" ? (
+            <form action={action.bind(null, post.id)}>
+              <SubmitButton pendingLabel="Posting..." size="sm" variant="ghost">
+                Post
+              </SubmitButton>
+            </form>
+          ) : null,
+      };
+    }),
   ];
 
   return (
     <AdminShell
       actions={
         <>
-          <SecondaryLink href="/posts">All posts</SecondaryLink>
-          {needsReviewPrep ? (
-            <form action={prepareForReviewAction}>
-              <SubmitButton
-                className="inline-flex h-10 items-center rounded-md bg-sky-400 px-4 text-sm font-semibold text-black transition hover:bg-sky-300 disabled:cursor-wait disabled:opacity-70"
-                pendingLabel="Preparing image, dev.to, socials..."
-              >
-                Prepare for review
-              </SubmitButton>
-            </form>
-          ) : null}
-          {!isProtectedImport && hasPromotionAssets && !isFullyPublished ? (
-            <form action={approveAndPublishAction}>
-              <SubmitButton
-                className="inline-flex h-10 items-center rounded-md bg-emerald-400 px-4 text-sm font-semibold text-black transition hover:bg-emerald-300 disabled:cursor-wait disabled:opacity-70"
-                pendingLabel="Publishing..."
-              >
-                Approve and publish
-              </SubmitButton>
-            </form>
-          ) : null}
-          {!isProtectedImport ? (
-            <form action={scheduleTomorrowAction}>
-              <SubmitButton
-                className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white transition hover:border-orange-400 hover:text-orange-300 disabled:cursor-wait disabled:opacity-70"
-                pendingLabel="Scheduling..."
-              >
+          {primaryAction}
+          {!isProtectedImport && !isBlogPublished && blogPublication?.status !== "SCHEDULED" ? (
+            <form action={schedulePostForTomorrow.bind(null, post.id)}>
+              <SubmitButton pendingLabel="Scheduling..." variant="secondary">
                 Schedule for tomorrow
               </SubmitButton>
             </form>
           ) : null}
-          {!isProtectedImport ? (
-            <form action={publishBlogAction}>
-              <SubmitButton
-                className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
-                pendingLabel={isBlogPublished ? "Refreshing..." : "Publishing..."}
-              >
-                {isBlogPublished ? "Refresh blog" : "Publish blog"}
-              </SubmitButton>
-            </form>
-          ) : null}
-          {hasPromotionAssets && isBlogPublished ? (
-            <form action={publishSocialsAction}>
-              <SubmitButton
-                className="inline-flex h-10 items-center rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                pendingLabel="Posting..."
-              >
-                {hasPublishedSocial ? "Retry socials" : "Post to socials"}
-              </SubmitButton>
-            </form>
-          ) : hasPromotionAssets ? (
-            <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-400">
-              Publish blog first
-            </span>
-          ) : null}
-          <a
-            className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white transition hover:border-orange-400 hover:text-orange-300"
-            href={publicUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            View blog post
-          </a>
+          <Menu label="⋯" triggerClassName={buttonClass("secondary")}>
+            {isBlogPublished ? (
+              <a className={menuItemClass} href={publicUrl} rel="noreferrer" target="_blank">
+                View on blog ↗
+              </a>
+            ) : null}
+            {!isProtectedImport ? (
+              <form action={publishBlogCanonicalPost.bind(null, post.id)}>
+                <SubmitButton className={menuItemClass} pendingLabel="Publishing...">
+                  {isBlogPublished ? "Refresh blog copy" : "Publish to blog only"}
+                </SubmitButton>
+              </form>
+            ) : null}
+            {!isProtectedImport && devToPublication?.externalId ? (
+              <>
+                <a className={menuItemClass} href="https://dev.to/dashboard" rel="noreferrer" target="_blank">
+                  dev.to dashboard ↗
+                </a>
+                <form action={recreateDevToDraftForPost.bind(null, post.id)}>
+                  <SubmitButton className={menuItemClass} pendingLabel="Recreating...">
+                    Recreate dev.to draft
+                  </SubmitButton>
+                </form>
+              </>
+            ) : null}
+            {!isProtectedImport && isPipelineQueuePost ? (
+              <>
+                <div className="my-1 border-t border-line" />
+                <form action={deletePipelinePost.bind(null, post.id)}>
+                  <SubmitButton
+                    className={menuDangerItemClass}
+                    confirm={`Delete "${post.title}"? This can't be undone.`}
+                    pendingLabel="Deleting..."
+                  >
+                    Delete post
+                  </SubmitButton>
+                </form>
+              </>
+            ) : null}
+          </Menu>
         </>
       }
-      description="Edit the canonical article, create dev.to drafts, and prepare social promotion from one screen."
-      eyebrow="Post workspace"
+      breadcrumb={
+        <Link className="hover:text-white" href="/posts">
+          ← Posts
+        </Link>
+      }
+      description={
+        <span className="flex flex-wrap items-center gap-2">
+          <StatusPill tone={status.tone}>{status.label}</StatusPill>
+          {isProtectedImport ? <StatusPill>Imported from Substack</StatusPill> : null}
+          <span>Edited {relativeTime(post.updatedAt)}</span>
+          {blogPublication?.status === "SCHEDULED" && blogPublication.scheduledAt ? (
+            <span>
+              · Goes live{" "}
+              {blogPublication.scheduledAt.toLocaleString("en-US", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "America/New_York",
+              })}{" "}
+              ET
+            </span>
+          ) : null}
+        </span>
+      }
       title={post.title}
     >
-      <section className="mb-6 rounded-lg border border-white/10 bg-[#141414] p-5">
-        {isBlogScheduled ? (
-          <div className="mb-5 rounded-md border border-orange-400/30 bg-orange-500/10 p-3 text-sm text-orange-100">
-            Scheduled for {blogPublication.scheduledAt?.toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-              timeZone: "America/New_York",
-            })} America/New_York.
-          </div>
-        ) : null}
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-              Publishing route
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
-              Work left on this post
-            </h2>
-          </div>
-          <p className="text-sm text-zinc-400">
-            Move left to right before publishing broadly.
-          </p>
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {routeSteps.map((step, index) => (
-            <div
-              className={`rounded-md border p-3 ${
-                step.done
-                  ? "border-emerald-400/30 bg-emerald-500/10"
-                  : "border-white/10 bg-black/30"
-              }`}
-              key={step.label}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                Step {index + 1}
-              </p>
-              <h3 className="mt-2 font-semibold text-white">{step.label}</h3>
-              <p
-                className={`mt-1 text-sm ${
-                  step.done ? "text-emerald-300" : "text-zinc-400"
-                }`}
-              >
-                {step.detail}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-6 rounded-lg border border-red-400/30 bg-red-500/10 p-5">
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-red-300">
-              Record controls
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-white">
-              {isProtectedImport ? "Protected imported archive" : "Pipeline-owned post"}
-            </h2>
-            <p className="mt-2 text-sm text-red-100/75">
-              {isProtectedImport
-                ? "Imported Substack posts cannot be deleted from the admin app."
-                : isPipelineQueuePost
-                  ? "This post is still in the idea/draft/queue workflow and can be removed if it is no longer useful."
-                  : "Published or promoted posts are locked against deletion from this workflow."}
-            </p>
-          </div>
-          {!isProtectedImport && isPipelineQueuePost ? (
-            <form action={deleteAction}>
-              <SubmitButton
-                className="h-10 rounded-md border border-red-400 px-4 text-sm font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
-                pendingLabel="Deleting..."
-              >
-                Delete post
-              </SubmitButton>
-            </form>
-          ) : null}
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[0.42fr_0.58fr]">
-        <div className="grid h-fit gap-6">
-          <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-              Blog
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">
-              Canonical source
-            </h2>
-            <div className="mt-4 grid gap-2 text-sm text-zinc-300">
-              <p>Status: {post.status.replaceAll("_", " ")}</p>
-              <p>Slug: {post.slug}</p>
-              <p>Tags: {post.tags.length > 0 ? post.tags.join(", ") : "None"}</p>
-              <p>
-                Canonical:{" "}
-                {isBlogPublished ? (
-                  <a
-                    className="font-semibold text-orange-300 underline-offset-4 hover:underline"
-                    href={blogPublication?.externalUrl || post.canonicalUrl || publicUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Live on blog
-                  </a>
-                ) : (
-                  "Not published"
-                )}
-              </p>
-            </div>
-            <div className="mt-5 grid gap-3">
-              {post.coverImageUrl ? (
-                <Image
-                  alt=""
-                  className="aspect-video w-full rounded-md border border-white/10 object-cover"
-                  height={360}
-                  src={post.coverImageUrl}
-                  width={640}
-                />
-              ) : (
-                <div className="flex aspect-video w-full items-center justify-center rounded-md border border-dashed border-white/15 bg-black/40 text-sm text-zinc-500">
-                  No cover image
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="min-w-0">
+          <Tabs
+            items={[
+              { active: activeTab === "article", href: `/posts/${post.id}`, label: "Article" },
+              {
+                active: activeTab === "promo",
+                count: post.promotionAssets.length || undefined,
+                href: `/posts/${post.id}?tab=promo`,
+                label: "Promo copy",
+              },
+            ]}
+          />
+          <div className="pt-5">
+            {activeTab === "article" ? (
+              <PostForm action={updatePost.bind(null, post.id)} post={post} />
+            ) : (
+              <div className="grid gap-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-zinc-400">
+                    LinkedIn and Bluesky copy. The first comment is saved for posting by hand.
+                  </p>
+                  <form action={generatePromotionAssetsForPost.bind(null, post.id)}>
+                    <SubmitButton
+                      pendingLabel={hasPromotionAssets ? "Regenerating..." : "Generating..."}
+                      size="sm"
+                      variant={hasPromotionAssets ? "secondary" : "primary"}
+                    >
+                      {hasPromotionAssets ? "Regenerate copy" : "Generate copy"}
+                    </SubmitButton>
+                  </form>
                 </div>
-              )}
-              <form action={generateCoverImageAction}>
+                {hasPromotionAssets ? (
+                  <form action={updatePromotionAssetsForPost.bind(null, post.id)} className="grid gap-5">
+                    {promoFields.map((field) => {
+                      const value = promotionAssets.get(field.type) || "";
+
+                      return (
+                        <label className="grid gap-2" key={field.name}>
+                          <span className="flex items-center justify-between gap-3 text-sm font-medium text-zinc-300">
+                            <span>
+                              {field.label}
+                              <span className="ml-2 text-xs font-normal text-zinc-500 tabular-nums">
+                                {value.length}/{field.limit}
+                              </span>
+                            </span>
+                            <CopyButton className={buttonClass("ghost", "sm")} value={value} />
+                          </span>
+                          <textarea
+                            className="rounded-lg border border-line bg-canvas px-3 py-2.5 text-sm leading-6 text-white outline-none focus:border-zinc-500"
+                            defaultValue={value}
+                            maxLength={field.limit}
+                            name={field.name}
+                            rows={field.rows}
+                          />
+                        </label>
+                      );
+                    })}
+                    <div>
+                      <SubmitButton pendingLabel="Saving..." variant="secondary">
+                        Save copy
+                      </SubmitButton>
+                    </div>
+                  </form>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-line-strong p-6 text-center text-sm text-zinc-400">
+                    No promo copy yet. Generate it from the article.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <aside className="grid h-fit min-w-0 grid-cols-1 gap-4">
+          <Card>
+            {post.coverImageUrl ? (
+              <Image
+                alt=""
+                className="aspect-[3/2] w-full rounded-lg border border-line object-cover"
+                height={400}
+                src={post.coverImageUrl}
+                width={600}
+              />
+            ) : (
+              <div className="flex aspect-[3/2] w-full items-center justify-center rounded-lg border border-dashed border-line-strong text-sm text-zinc-500">
+                No cover yet
+              </div>
+            )}
+            {!isProtectedImport ? (
+              <form action={generateCoverImageForPost.bind(null, post.id)} className="mt-3">
                 <SubmitButton
-                  className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black"
-                  pendingLabel={post.coverImageUrl ? "Regenerating..." : "Generating..."}
+                  pendingLabel={post.coverImageUrl ? "Redrawing..." : "Drawing..."}
+                  size="sm"
+                  variant="ghost"
                 >
-                  {post.coverImageUrl ? "Regenerate cover image" : "Generate cover image"}
+                  {post.coverImageUrl ? "↻ Regenerate cover" : "Generate cover"}
                 </SubmitButton>
               </form>
-              <p className="text-xs leading-5 text-zinc-500">
-                Used by the blog, dev.to, and LinkedIn image posts.
-              </p>
-            </div>
-            <div className="mt-5 rounded-md border border-white/10 bg-black/30 p-4">
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                  <h3 className="font-semibold text-white">Canonical blog publish</h3>
-                  <p className="mt-1 text-sm leading-6 text-zinc-400">
-                    Use the top-row publish button after review. Social posting
-                    is intentionally gated on this step.
-                  </p>
-                </div>
-                {isProtectedImport ? (
-                  <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-300">
-                    Imported archive
-                  </span>
-                ) : (
-                  <span className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-zinc-300">
-                    {isBlogPublished ? "Blog live" : "Awaiting publish"}
-                  </span>
-                )}
-              </div>
-              {blogPublication?.errorMessage ? (
-                <p className="mt-3 rounded-md bg-red-500/10 p-3 text-sm text-red-300">
-                  {blogPublication.errorMessage}
-                </p>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
-            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-                  dev.to
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">
-                  Draft syndication
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-zinc-400">
-                  Creates an unpublished draft with canonical link, CTA, and
-                  cover image when available.
-                </p>
-              </div>
-              <span className="w-fit rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
-                {devToPublication?.status || "NOT_STARTED"}
-              </span>
-            </div>
-            {devToPublication?.errorMessage ? (
-              <p className="mt-4 rounded-md bg-red-500/10 p-3 text-sm text-red-300">
-                {devToPublication.errorMessage}
-              </p>
             ) : null}
-            <div className="mt-5 flex flex-wrap gap-2">
-              {devToPublication?.externalId || devToPublication?.externalUrl ? (
-                <>
-                  <a
-                    className="inline-flex h-10 items-center rounded-md bg-orange-500 px-4 text-sm font-semibold text-black"
-                    href="https://dev.to/dashboard"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Open dev.to dashboard
-                  </a>
-                  {devToPublication.externalUrl ? (
-                    <a
-                      className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
-                      href={devToPublication.externalUrl}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Public URL after publish
-                    </a>
-                  ) : null}
-                  <form action={recreateDevToDraftAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black"
-                      pendingLabel="Recreating..."
-                    >
-                      Recreate dev.to draft
-                    </SubmitButton>
-                  </form>
-                  {isBlogPublished ? (
-                    <form action={publishDevToAction}>
-                      <SubmitButton
-                        className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                        pendingLabel="Publishing..."
-                      >
-                        {devToPublication.status === "PUBLISHED"
-                          ? "Publish again to dev.to"
-                          : "Publish dev.to"}
-                      </SubmitButton>
-                    </form>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <form action={createDevToDraftAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                      pendingLabel="Creating draft..."
-                    >
-                      Create dev.to draft
-                    </SubmitButton>
-                  </form>
-                  {isBlogPublished ? (
-                    <form action={publishDevToAction}>
-                      <SubmitButton
-                        className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                        pendingLabel="Publishing..."
-                      >
-                        Publish dev.to
-                      </SubmitButton>
-                    </form>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </section>
-        </div>
+          </Card>
 
-        <section className="rounded-lg border border-white/10 bg-[#141414] p-5">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-                Promotion
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">
-                Social copy
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-zinc-400">
-                Generate LinkedIn and Bluesky copy, edit it, then publish it
-                through the connected platform APIs.
-              </p>
-            </div>
-            <form action={generatePromotionAction}>
-              <SubmitButton
-                className="h-10 rounded-md bg-orange-500 px-4 text-sm font-semibold text-black transition hover:bg-orange-400"
-                pendingLabel={hasPromotionAssets ? "Regenerating..." : "Generating..."}
-              >
-                {hasPromotionAssets ? "Regenerate copy" : "Generate copy"}
-              </SubmitButton>
-            </form>
-          </div>
+          <Card title="Publishing">
+            <ul className="-mx-5 -my-2 divide-y divide-line">
+              {platformRows.map((row) => {
+                const state =
+                  row.platform === "BLOG" && isBlogPublished
+                    ? { label: "Live", tone: "live" as const }
+                    : publicationState(publications.get(row.platform));
 
-          {hasPromotionAssets ? (
-            <div className="mt-6 grid gap-6">
-              <div className="grid gap-3 rounded-md border border-white/10 bg-black/40 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold text-white">LinkedIn</h3>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {linkedInPublication?.publishedAt
-                        ? `Published ${linkedInPublication.publishedAt.toLocaleString()}`
-                        : "Posts the saved LinkedIn copy."}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-600">
-                      Main post: {linkedInPost.length}/{linkedInPostLimit}. First comment is saved
-                      for manual follow-up.
-                    </p>
-                  </div>
-                  <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
-                    {linkedInPublication?.status || "NOT_STARTED"}
-                  </span>
-                </div>
-                {linkedInPublication?.errorMessage ? (
-                  <p className="rounded-md bg-red-500/10 p-3 text-sm text-red-300">
-                    {linkedInPublication.errorMessage}
-                  </p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  {linkedInPublication?.externalUrl ? (
-                    <a
-                      className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
-                      href={linkedInPublication.externalUrl}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Open LinkedIn post
-                    </a>
-                  ) : null}
-                  <form action={publishLinkedInAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                      pendingLabel="Posting..."
-                    >
-                      {linkedInPublication?.status === "PUBLISHED"
-                        ? "Post again to LinkedIn"
-                        : "Post to LinkedIn"}
-                    </SubmitButton>
-                  </form>
-                </div>
-              </div>
+                return (
+                  <li className="px-5 py-2.5" key={row.platform}>
+                    <div className="flex items-center gap-3">
+                      <StatusDot tone={state.tone} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-white">
+                          {row.link ? (
+                            <a className="hover:underline" href={row.link} rel="noreferrer" target="_blank">
+                              {row.label} ↗
+                            </a>
+                          ) : (
+                            row.label
+                          )}
+                        </p>
+                        <p className="text-xs text-zinc-500">{state.label}</p>
+                      </div>
+                      {row.action}
+                    </div>
+                    {row.error && state.tone === "failed" ? (
+                      <p className="mt-1.5 line-clamp-2 pl-5 text-xs text-red-300" title={row.error}>
+                        {row.error}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
 
-              <div className="grid gap-3 rounded-md border border-white/10 bg-black/40 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold text-white">Bluesky</h3>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {blueskyPublication?.publishedAt
-                        ? `Published ${blueskyPublication.publishedAt.toLocaleString()}`
-                        : "Posts the saved Bluesky copy."}
-                    </p>
-                  </div>
-                  <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-zinc-300">
-                    {blueskyPublication?.status || "NOT_STARTED"}
-                  </span>
-                </div>
-                {blueskyPublication?.errorMessage ? (
-                  <p className="rounded-md bg-red-500/10 p-3 text-sm text-red-300">
-                    {blueskyPublication.errorMessage}
-                  </p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  {blueskyPublication?.externalUrl ? (
-                    <a
-                      className="inline-flex h-10 items-center rounded-md border border-white/15 px-4 text-sm font-semibold text-white"
-                      href={blueskyPublication.externalUrl}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Open Bluesky post
-                    </a>
-                  ) : null}
-                  <form action={publishBlueskyAction}>
-                    <SubmitButton
-                      className="h-10 rounded-md border border-emerald-400 px-4 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400 hover:text-black disabled:cursor-wait disabled:opacity-70"
-                      pendingLabel="Posting..."
-                    >
-                      {blueskyPublication?.status === "PUBLISHED"
-                        ? "Post again to Bluesky"
-                        : "Post to Bluesky"}
-                    </SubmitButton>
-                  </form>
-                </div>
-              </div>
-
-              <form action={updatePromotionAction} className="grid gap-5">
-                {[
-                  {
-                    height: "min-h-72",
-                    label: "LinkedIn post",
-                    limit: linkedInPostLimit,
-                    name: "linkedInPost",
-                    value: linkedInPost,
-                  },
-                  {
-                    height: "min-h-28",
-                    label: "LinkedIn first comment",
-                    limit: linkedInFirstCommentLimit,
-                    name: "linkedInFirstComment",
-                    value: linkedInFirstComment,
-                  },
-                  {
-                    height: "min-h-28",
-                    label: "Bluesky post",
-                    limit: blueskyPostLimit,
-                    name: "blueskyPost",
-                    value: blueskyPost,
-                  },
-                ].map(({ height, label, limit, name, value }) => (
-                  <label
-                    className="grid gap-2 text-sm font-semibold text-zinc-300"
-                    key={name}
-                  >
-                    <span className="flex items-center justify-between gap-3">
-                      <span>
-                        {label}
-                        <span className="ml-2 text-xs font-medium text-zinc-500">
-                          {value.length}/{limit}
-                        </span>
-                      </span>
-                      <CopyButton value={value} />
-                    </span>
-                    <textarea
-                      className={`${height} rounded-md border border-white/10 bg-black px-3 py-3 text-sm leading-6 text-white outline-none ring-orange-500/20 focus:ring-4`}
-                      maxLength={limit}
-                      name={name}
-                      defaultValue={value}
-                    />
-                  </label>
-                ))}
-                <SubmitButton
-                  className="h-10 w-fit rounded-md border border-orange-400 px-4 text-sm font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black"
-                  pendingLabel="Saving..."
-                >
-                  Save copy edits
-                </SubmitButton>
-              </form>
-            </div>
+          {!isBlogPublished && !isProtectedImport ? (
+            <p className="px-1 text-xs leading-5 text-zinc-500">
+              dev.to and socials go out after the blog post is live, so the canonical link always resolves.
+            </p>
           ) : null}
-        </section>
+        </aside>
       </div>
-
-      <section className="mt-6 rounded-lg border border-white/10 bg-[#141414] p-5">
-        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-400">
-          Edit
-        </p>
-        <h2 className="mt-2 text-2xl font-semibold text-white">
-          Canonical article
-        </h2>
-        <div className="mt-5">
-          <PostForm action={updateAction} post={post} />
-        </div>
-      </section>
     </AdminShell>
   );
 }

@@ -519,3 +519,9 @@ export async function approveAndPublishPost(postId: string) {
   await requireAdmin();
   await workflow.approveAndPublishPost(postId);
 }
+
+export async function retryFailedPlatformsForPost(postId: string) {
+  await requireAdmin();
+  await workflow.retryFailedPlatforms(postId);
+  revalidatePath("/");
+}

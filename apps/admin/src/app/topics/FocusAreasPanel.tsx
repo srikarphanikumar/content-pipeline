@@ -1,4 +1,5 @@
 import { SubmitButton } from "../components/SubmitButton";
+import { buttonClass } from "../components/ui";
 import { createFocusArea, deleteFocusArea, toggleFocusArea, updateFocusArea } from "./actions";
 
 export type FocusAreaSummary = {
@@ -12,7 +13,7 @@ export type FocusAreaSummary = {
 };
 
 const inputClass =
-  "h-9 rounded-md border border-white/10 bg-black px-3 text-sm text-white outline-none ring-orange-500/20 focus:ring-4";
+  "h-9 rounded-lg border border-line bg-canvas px-3 text-sm text-white outline-none focus:border-zinc-500";
 const labelClass = "grid gap-1 text-xs font-semibold text-zinc-400";
 const weights = [
   [1, "Normal"],
@@ -33,18 +34,11 @@ export function FocusAreasPanel({
   focusAreas: FocusAreaSummary[];
 }) {
   return (
-    <section className="mb-4 rounded-lg border border-white/10 bg-[#141414] p-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-orange-300">
-            Focus areas
-          </p>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
-            Active areas drive the daily top-up and are pre-checked when you generate ideas.
-            Weight sets how much of a mixed batch each area gets.
-          </p>
-        </div>
-      </div>
+    <div>
+      <p className="max-w-3xl text-sm leading-6 text-zinc-400">
+        Active areas drive the daily top-up and are pre-checked when you generate ideas. Weight sets how
+        much of a mixed batch each area gets.
+      </p>
 
       {areaError ? (
         <p className="mt-3 rounded-md border border-red-400/30 bg-red-500/10 p-2 text-sm text-red-100">
@@ -57,8 +51,8 @@ export function FocusAreasPanel({
           <details
             className={`group rounded-md border px-2.5 py-1.5 text-xs open:basis-full ${
               area.active
-                ? "border-orange-400/40 bg-orange-500/10 text-orange-100"
-                : "border-white/10 bg-black/30 text-zinc-500"
+                ? "border-line-strong bg-white/[0.04] text-zinc-100"
+                : "border-line text-zinc-500"
             }`}
             key={area.id}
           >
@@ -68,12 +62,12 @@ export function FocusAreasPanel({
                 {area.activeTopicCount}
               </span>
               {area.weight > 1 ? (
-                <span className="text-[11px] text-orange-300">×{area.weight}</span>
+                <span className="text-[11px] text-zinc-400">×{area.weight}</span>
               ) : null}
               {!area.active ? <span className="text-[11px]">off</span> : null}
             </summary>
 
-            <div className="mt-3 grid gap-3 border-t border-white/10 pt-3">
+            <div className="mt-3 grid gap-3 border-t border-line pt-3">
               <form action={updateFocusArea.bind(null, area.id)} className="grid gap-3 md:grid-cols-[1fr_2fr_auto_auto] md:items-end">
                 <label className={labelClass}>
                   Name
@@ -100,7 +94,7 @@ export function FocusAreasPanel({
                   </select>
                 </label>
                 <SubmitButton
-                  className="h-9 rounded-md bg-orange-500 px-3 text-xs font-semibold text-black transition hover:bg-orange-400 disabled:cursor-wait disabled:opacity-70"
+                  className={buttonClass("primary")}
                   pendingLabel="Saving..."
                 >
                   Save
@@ -109,7 +103,7 @@ export function FocusAreasPanel({
               <div className="flex flex-wrap gap-2">
                 <form action={toggleFocusArea.bind(null, area.id)}>
                   <SubmitButton
-                    className="h-8 rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+                    className={buttonClass("secondary", "sm")}
                     pendingLabel="Saving..."
                   >
                     {area.active ? "Turn off" : "Turn on"}
@@ -122,7 +116,7 @@ export function FocusAreasPanel({
                 ) : (
                   <form action={deleteFocusArea.bind(null, area.id)}>
                     <SubmitButton
-                      className="h-8 rounded-md border border-red-400 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-500 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                      className={buttonClass("danger", "sm")}
                       pendingLabel="Deleting..."
                     >
                       Delete
@@ -137,7 +131,7 @@ export function FocusAreasPanel({
 
       <form
         action={createFocusArea}
-        className="mt-4 grid gap-2 border-t border-white/10 pt-4 md:grid-cols-[1fr_2fr_auto_auto] md:items-end"
+        className="mt-4 grid gap-2 border-t border-line pt-4 md:grid-cols-[1fr_2fr_auto_auto] md:items-end"
       >
         <label className={labelClass}>
           New focus area
@@ -163,12 +157,12 @@ export function FocusAreasPanel({
           </select>
         </label>
         <SubmitButton
-          className="h-9 rounded-md border border-orange-400 px-3 text-xs font-semibold text-orange-300 transition hover:bg-orange-500 hover:text-black disabled:cursor-wait disabled:opacity-70"
+          className={buttonClass("secondary")}
           pendingLabel="Adding..."
         >
           Add area
         </SubmitButton>
       </form>
-    </section>
+    </div>
   );
 }

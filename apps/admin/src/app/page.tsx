@@ -243,19 +243,23 @@ export default async function Home() {
 
   return (
     <AdminShell actions={<PrimaryLink href="/posts/new">New post</PrimaryLink>} title="Inbox">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="grid h-fit gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid h-fit grid-cols-1 gap-6">
           {items.length > 0 ? (
             <Card title={`Needs you · ${items.length}`}>
               <ul className="-mx-5 -my-2 divide-y divide-line">
                 {items.map((item) => (
-                  <li className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center" key={item.key}>
-                    <StatusDot tone={item.tone} />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-white">{item.title}</p>
-                      <p className="mt-0.5 text-sm text-zinc-400">{item.detail}</p>
+                  <li className="flex gap-3 px-5 py-3" key={item.key}>
+                    <span className="pt-2">
+                      <StatusDot tone={item.tone} />
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-white">{item.title}</p>
+                        <p className="mt-0.5 text-sm text-zinc-400">{item.detail}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">{item.actions}</div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">{item.actions}</div>
                   </li>
                 ))}
               </ul>
@@ -283,7 +287,7 @@ export default async function Home() {
           ) : null}
         </div>
 
-        <aside className="grid h-fit gap-6">
+        <aside className="grid h-fit grid-cols-1 gap-6">
           <Card title="This week">
             <dl className="grid gap-3">
               {stats.map((stat) => (

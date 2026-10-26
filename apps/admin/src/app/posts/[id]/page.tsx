@@ -288,7 +288,7 @@ export default async function EditPostPage({ params, searchParams }: EditPostPag
       }
       title={post.title}
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="min-w-0">
           <Tabs
             items={[
@@ -362,7 +362,7 @@ export default async function EditPostPage({ params, searchParams }: EditPostPag
           </div>
         </div>
 
-        <aside className="grid h-fit gap-4">
+        <aside className="grid h-fit min-w-0 grid-cols-1 gap-4">
           <Card>
             {post.coverImageUrl ? (
               <Image

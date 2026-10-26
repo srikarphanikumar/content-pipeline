@@ -42,6 +42,7 @@ export type {
   EmailKind,
   Platform,
   PlatformMetricSnapshot,
+  PlatformPublication,
   PlatformPublishStatus,
   Post,
   PostStatus,

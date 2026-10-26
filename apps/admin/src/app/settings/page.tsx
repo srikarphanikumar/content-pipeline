@@ -188,7 +188,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   return (
     <AdminShell
       description="Review provider connections and server-side credentials used by syndication, promotion, and generation workflows."
-      eyebrow="Configuration"
       title="Settings"
     >
       {message ? (

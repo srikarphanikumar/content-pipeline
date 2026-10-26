@@ -109,7 +109,6 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
         </>
       }
       description="Review canonical posts, create dev.to drafts, generate promotion copy, and keep the ready buffer healthy."
-      eyebrow="Publishing"
       title={selectedView === "archive" ? "Imported archive" : selectedView === "all" ? "All posts" : "Post queue"}
     >
       <div className="mb-3 flex flex-wrap gap-2">

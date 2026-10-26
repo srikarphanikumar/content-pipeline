@@ -1,13 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #080808;
-  --foreground: #f7f2ea;
+  --background: #0a0a0a;
+  --foreground: #f4f1ec;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-canvas: #0a0a0a;
+  --color-surface: #131313;
+  --color-raised: #1b1b1b;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.16);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -24,4 +29,9 @@ input,
 select,
 textarea {
   letter-spacing: 0;
+}
+
+/* Native <details> menus: hide the default disclosure marker. */
+summary::-webkit-details-marker {
+  display: none;
 }

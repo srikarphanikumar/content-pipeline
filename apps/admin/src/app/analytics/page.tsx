@@ -221,7 +221,6 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
   return (
     <AdminShell
       description="Track syndication coverage, stored platform metrics, and notification health across the publishing system."
-      eyebrow="Measurement"
       title="Analytics"
     >
       {manual ? (

@@ -148,7 +148,6 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     <AdminShell
       actions={<PrimaryLink href="/posts/new">Create post</PrimaryLink>}
       description="Track new article ideas before they become drafts. This is the missing buffer between inspiration and the 20-post ready queue."
-      eyebrow="Planning"
       title="Topic backlog"
     >
       {generated ? (

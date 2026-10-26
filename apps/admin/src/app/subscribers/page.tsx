@@ -140,7 +140,6 @@ export default async function SubscribersPage({ searchParams }: SubscribersPageP
   return (
     <AdminShell
       description="Review confirmed readers, pending confirmations, unsubscribe state, and acquisition source."
-      eyebrow="Audience"
       title="Subscribers"
     >
       {email ? (

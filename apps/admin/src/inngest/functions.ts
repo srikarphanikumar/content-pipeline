@@ -6,10 +6,10 @@ import {
   prepareNextSelectedTopicForReview,
   preparePostAssetsForReview,
 } from "@/app/topics/pipeline";
-import { collectPlatformMetricSnapshots, latestPlatformStatsLines } from "@/lib/analytics";
+import { collectPlatformMetricSnapshots } from "@/lib/analytics";
+import { buildNightlyReport } from "@/lib/nightly-report";
 import { credentialWarnings, sendBotMessage, sendNextForReview } from "@/lib/pipeline-bot";
 import { approvableStatuses } from "@/lib/post-workflow";
-import { escapeHtml } from "@/lib/telegram";
 import { inactiveTopicStatuses } from "@/lib/topic-status";
 import { botFunctions } from "./bot-functions";
 import { inngest } from "./client";
@@ -18,15 +18,6 @@ const activeTopicTarget = 50;
 const draftReadyTarget = 20;
 const maxDraftsPerRun = 2;
 
-function truncateLine(value: string, maxLength = 120) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, maxLength - 1).trim()}…`;
-}
 
 function notificationDate() {
   return new Intl.DateTimeFormat("en-US", {
@@ -39,21 +30,6 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function formatStatusCounts(counts: {
-  failed: number;
-  generated?: number;
-  published: number;
-  scheduled: number;
-}) {
-  const parts = [
-    counts.published > 0 ? pluralize(counts.published, "published") : null,
-    counts.scheduled > 0 ? pluralize(counts.scheduled, "scheduled") : null,
-    counts.generated ? pluralize(counts.generated, "generated") : null,
-    counts.failed > 0 ? `${pluralize(counts.failed, "failure")} to review` : null,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(", ") : "No activity yet";
-}
 
 export const dailyPlanning = inngest.createFunction(
   {
@@ -365,128 +341,34 @@ export const nightlyStatsAndTopics = inngest.createFunction(
     ],
   },
   async ({ step }) => {
-    const collectionResult = await step.run("Collect platform metric snapshots", async () =>
+    const collection = await step.run("Collect platform metric snapshots", async () =>
       collectPlatformMetricSnapshots(),
     );
 
-    const statsLines = await step.run("Read latest platform stats", async () =>
-      latestPlatformStatsLines({ take: 8 }),
-    );
-
-    const platformState = await step.run("Read platform delivery state", async () =>
-      db.platformPublication.findMany({
+    await step.run("Top up topic backlog", async () => {
+      const activeTopicCount = await db.topic.count({
         where: {
-          platform: {
-            in: ["BLOG", "DEVTO", "LINKEDIN", "BLUESKY"],
+          status: {
+            notIn: inactiveTopicStatuses,
           },
         },
-        include: {
-          post: {
-            select: {
-              title: true,
-            },
-          },
-        },
-        orderBy: {
-          updatedAt: "desc",
-        },
-      }),
-    );
-
-    const topicState = await step.run("Prepare next-day topic state", async () => {
-      const [activeTopicCount, selectedTopics] = await Promise.all([
-        db.topic.count({
-          where: {
-            status: {
-              notIn: inactiveTopicStatuses,
-            },
-          },
-        }),
-        db.topic.findMany({
-          where: {
-            status: "selected",
-            posts: {
-              none: {},
-            },
-          },
-          orderBy: [
-            {
-              audienceFit: "desc",
-            },
-            {
-              noveltyScore: "desc",
-            },
-            {
-              updatedAt: "asc",
-            },
-          ],
-          take: 5,
-          select: {
-            title: true,
-          },
-        }),
-      ]);
+      });
 
       if (activeTopicCount < activeTopicTarget) {
         await generateNextBacklogTopics();
       }
-
-      return {
-        activeTopicCount,
-        selectedTopics,
-      };
     });
 
-    const summaryForPlatform = (platform: "BLOG" | "DEVTO" | "LINKEDIN" | "BLUESKY") => {
-      const publications = platformState.filter((publication) => publication.platform === platform);
-
-      return formatStatusCounts({
-        failed: publications.filter((publication) => publication.status === "FAILED").length,
-        generated: publications.filter((publication) => publication.status === "GENERATED").length,
-        published: publications.filter((publication) => publication.status === "PUBLISHED").length,
-        scheduled: publications.filter((publication) => publication.status === "SCHEDULED").length,
-      });
-    };
-    const failedPublications = platformState.filter(
-      (publication) => publication.status === "FAILED",
+    // Built from tonight's snapshots only, so a stat that failed to collect shows the reason
+    // instead of last night's number.
+    const text = await step.run("Build nightly report", async () =>
+      buildNightlyReport({
+        capturedAt: new Date(collection.capturedAt),
+        skipped: collection.skipped,
+      }),
     );
-    const nightlyFailureSummary =
-      failedPublications.length > 0
-        ? `${pluralize(failedPublications.length, "failure")} needs review: ${truncateLine(
-            `${failedPublications[0].platform} - ${failedPublications[0].post.title}`,
-            120,
-          )}`
-        : `None. ${pluralize(collectionResult.metricsStored, "metric")} stored tonight.`;
-    const selectedTopicText =
-      topicState.selectedTopics.length > 0
-        ? topicState.selectedTopics.map((topic) => `- ${topic.title}`).join("\n")
-        : "- No selected topics ready for drafting.";
-    const warnings = await step.run("Check platform credentials", async () =>
-      credentialWarnings({ withinDays: 7 }),
-    );
-    const text = [
-      `📊 <b>Platform report · ${escapeHtml(notificationDate())}</b>`,
-      "",
-      ...(warnings.length
-        ? [...warnings.map((warning) => `⚠️ <b>${escapeHtml(warning)}</b>`), ""]
-        : []),
-      `Blog: ${escapeHtml(summaryForPlatform("BLOG"))}`,
-      `dev.to: ${escapeHtml(summaryForPlatform("DEVTO"))}`,
-      `LinkedIn: ${escapeHtml(summaryForPlatform("LINKEDIN"))}`,
-      `Bluesky: ${escapeHtml(summaryForPlatform("BLUESKY"))}`,
-      `Failed jobs: ${escapeHtml(nightlyFailureSummary)}`,
-      "",
-      "<b>Latest stats</b>",
-      escapeHtml(statsLines.join("\n") || "No stats collected yet."),
-      "",
-      "<b>Topics for tomorrow</b>",
-      escapeHtml(selectedTopicText),
-      "",
-      `Active topic backlog: ${topicState.activeTopicCount}/${activeTopicTarget}`,
-      `Metrics stored: ${collectionResult.metricsStored}`,
-    ].join("\n");
 
-    return step.run("Send Telegram nightly stats", async () => ({
+    return step.run("Send Telegram nightly report", async () => ({
       messageId: await sendBotMessage({ kind: "NIGHTLY_STATS", text }),
     }));
   },

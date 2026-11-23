@@ -55,6 +55,7 @@ type TopicsPageProps = {
   searchParams: Promise<{
     area?: string;
     area_error?: string;
+    areas?: string;
     status?: string;
     cleared?: string;
     drafted?: string;
@@ -66,7 +67,7 @@ type TopicsPageProps = {
 };
 
 export default async function TopicsPage({ searchParams }: TopicsPageProps) {
-  const { area, area_error, cleared, drafted, generated, moved, prepared, source, status } =
+  const { area, area_error, areas, cleared, drafted, generated, moved, prepared, source, status } =
     await searchParams;
   const [topics, publishedPostCount, queuePostCount, focusAreaRows] = await Promise.all([
     db.topic.findMany({
@@ -199,6 +200,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     <AdminShell
       actions={
         <>
+          <ButtonLink href="/topics?areas=open#focus-areas">+ Focus area</ButtonLink>
           <CaptureTopicModal
             action={createTopic}
             defaultFocusAreaId={areaFilter && areaFilter !== "none" ? areaFilter : ""}
@@ -519,7 +521,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         </aside>
       </div>
 
-      <details className="mt-8 rounded-xl border border-line bg-surface px-5 py-4" open={Boolean(area_error)}>
+      <details
+        className="mt-8 scroll-mt-24 rounded-xl border border-line bg-surface px-5 py-4"
+        id="focus-areas"
+        open={Boolean(area_error) || areas === "open"}
+      >
         <summary className="cursor-pointer list-none font-semibold text-white">
           Manage focus areas{" "}
           <span className="text-sm font-normal text-zinc-500">
@@ -527,7 +533,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
           </span>
         </summary>
         <div className="mt-3">
-          <FocusAreasPanel areaError={area_error} focusAreas={focusAreas} />
+          <FocusAreasPanel
+            areaError={area_error}
+            focusAreas={focusAreas}
+            focusNewArea={areas === "open"}
+          />
         </div>
       </details>
     </AdminShell>

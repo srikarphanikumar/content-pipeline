@@ -266,3 +266,10 @@ model EmailDelivery {
   @@index([postId, kind])
   @@index([providerMessageId])
 }
+
+// Read state for the admin Inbox. Inbox items are derived from live data (failures, drafts
+// waiting for review, ...); an item counts as unread until it is read after its latest event.
+model InboxRead {
+  key    String   @id
+  readAt DateTime @default(now())
+}

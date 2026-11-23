@@ -19,6 +19,7 @@ import {
   relativeTime,
   type PillTone,
 } from "../../components/ui";
+import { MarkPostRead } from "../../inbox/MarkPostRead";
 import { PostForm } from "../PostForm";
 import {
   approveAndPublishPost,
@@ -288,6 +289,7 @@ export default async function EditPostPage({ params, searchParams }: EditPostPag
       }
       title={post.title}
     >
+      <MarkPostRead postId={post.id} version={post.updatedAt.toISOString()} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="min-w-0">
           <Tabs

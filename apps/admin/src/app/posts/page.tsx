@@ -4,7 +4,6 @@ import type { Prisma } from "@prisma/client";
 import { db, formatDate } from "@content-pipeline/db";
 import type { Platform, PostStatus } from "@content-pipeline/db";
 import { AdminShell, PrimaryLink } from "../components/AdminShell";
-import { Menu } from "../components/Menu";
 import { platformLabels, postStatusDisplay } from "../components/post-status";
 import { SubmitButton } from "../components/SubmitButton";
 import {
@@ -12,8 +11,6 @@ import {
   StatusDot,
   StatusPill,
   Tabs,
-  buttonClass,
-  menuDangerItemClass,
   relativeTime,
   type PillTone,
 } from "../components/ui";
@@ -111,18 +108,16 @@ export default async function AdminPostsPage({ searchParams }: AdminPostsPagePro
       actions={
         <>
           <PrimaryLink href="/posts/new">New post</PrimaryLink>
-          {activeTab === "drafts" || activeTab === "ready" ? (
-            <Menu label="⋯" triggerClassName={buttonClass("secondary")}>
-              <form action={clearPipelineQueue}>
-                <SubmitButton
-                  className={menuDangerItemClass}
-                  confirm="Delete every pipeline draft and ready post? Published and imported posts are kept."
-                  pendingLabel="Clearing..."
-                >
-                  Clear drafts & ready queue
-                </SubmitButton>
-              </form>
-            </Menu>
+          {(activeTab === "drafts" || activeTab === "ready") && counts[0] + counts[1] > 0 ? (
+            <form action={clearPipelineQueue}>
+              <SubmitButton
+                confirm={`Delete all ${counts[0] + counts[1]} drafts and ready posts? Published and imported posts are kept. This can't be undone.`}
+                pendingLabel="Clearing..."
+                variant="danger"
+              >
+                Clear queue
+              </SubmitButton>
+            </form>
           ) : null}
         </>
       }

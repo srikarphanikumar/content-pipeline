@@ -17,7 +17,9 @@ import {
   preparePostForReview,
   retryFailedPlatformsForPost,
 } from "./posts/actions";
+import { markInboxItemsRead } from "./inbox/actions";
 import { continueNewsletterForPost } from "./subscribers/actions";
+import { isInboxItemUnread, loadInboxReadState } from "@/lib/inbox";
 import { credentialWarnings } from "@/lib/pipeline-bot";
 import { approvableStatuses } from "@/lib/post-workflow";
 
@@ -28,10 +30,20 @@ const oneWeekAgo = () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 type InboxItem = {
   actions: React.ReactNode;
   detail: React.ReactNode;
+  // When the thing this item is about last changed. Read state older than this is ignored, so a
+  // new failure or a revised draft comes back as unread.
+  eventAt: Date;
   key: string;
   title: React.ReactNode;
   tone: PillTone;
 };
+
+// Items with no event time of their own (warnings, the empty-queue nudge) stay read once read.
+const noEvent = new Date(0);
+
+function todayInNewYork() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+}
 
 export default async function Home() {
   const weekAgo = oneWeekAgo();
@@ -82,20 +94,26 @@ export default async function Home() {
   const items: InboxItem[] = [];
 
   // Failed platform publishes, one row per post.
-  const failedByPost = new Map<string, { title: string; platforms: string[]; error: string | null }>();
+  const failedByPost = new Map<
+    string,
+    { error: string | null; eventAt: Date; platforms: string[]; title: string }
+  >();
 
   for (const publication of failedPublications) {
     const entry = failedByPost.get(publication.postId) || {
-      title: publication.post.title,
-      platforms: [],
       error: publication.errorMessage,
+      eventAt: publication.updatedAt,
+      platforms: [],
+      title: publication.post.title,
     };
     entry.platforms.push(platformLabels[publication.platform] || publication.platform);
+    entry.eventAt = entry.eventAt > publication.updatedAt ? entry.eventAt : publication.updatedAt;
     failedByPost.set(publication.postId, entry);
   }
 
   for (const [postId, failure] of failedByPost) {
     items.push({
+      eventAt: failure.eventAt,
       key: `failed-${postId}`,
       tone: "failed",
       title: (
@@ -119,6 +137,7 @@ export default async function Home() {
 
   for (const warning of warnings) {
     items.push({
+      eventAt: noEvent,
       key: `warning-${warning}`,
       tone: "failed",
       title: warning,
@@ -146,6 +165,7 @@ export default async function Home() {
     }
 
     items.push({
+      eventAt: delivery.updatedAt,
       key: `newsletter-${delivery.postId}`,
       tone: "pending",
       title: `Newsletter only partly sent: ${delivery.post.title}`,
@@ -175,6 +195,7 @@ export default async function Home() {
     items.push(
       missing.length > 0
         ? {
+            eventAt: post.updatedAt,
             key: `prepare-${post.id}`,
             tone: "pending",
             title: (
@@ -192,6 +213,7 @@ export default async function Home() {
             ),
           }
         : {
+            eventAt: post.updatedAt,
             key: `approve-${post.id}`,
             tone: "info",
             title: (
@@ -223,7 +245,8 @@ export default async function Home() {
 
   if (reviewPosts.length === 0 && scheduledPublications.length === 0) {
     items.push({
-      key: "empty-queue",
+      eventAt: noEvent,
+      key: `empty-queue-${todayInNewYork()}`,
       tone: "pending",
       title: "Nothing is queued for review",
       detail: "Pick or draft an idea so tomorrow's post is ready in time.",
@@ -235,6 +258,10 @@ export default async function Home() {
     });
   }
 
+  const readState = await loadInboxReadState(items.map((item) => item.key));
+  const unreadItems = items.filter((item) => isInboxItemUnread(readState, item.key, item.eventAt));
+  const readItems = items.filter((item) => !isInboxItemUnread(readState, item.key, item.eventAt));
+
   const stats = [
     { label: "Published this week", value: `${publishedThisWeek} / 5` },
     { label: "Waiting for review", value: reviewPosts.length.toString() },
@@ -245,30 +272,37 @@ export default async function Home() {
     <AdminShell actions={<PrimaryLink href="/posts/new">New post</PrimaryLink>} title="Inbox">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid h-fit grid-cols-1 gap-6">
-          {items.length > 0 ? (
-            <Card title={`Needs you · ${items.length}`}>
-              <ul className="-mx-5 -my-2 divide-y divide-line">
-                {items.map((item) => (
-                  <li className="flex gap-3 px-5 py-3" key={item.key}>
-                    <span className="pt-2">
-                      <StatusDot tone={item.tone} />
-                    </span>
-                    <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-white">{item.title}</p>
-                        <p className="mt-0.5 text-sm text-zinc-400">{item.detail}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">{item.actions}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+          {unreadItems.length > 0 ? (
+            <Card
+              actions={
+                <form action={markInboxItemsRead.bind(null, unreadItems.map((item) => item.key))}>
+                  <SubmitButton pendingLabel="Marking..." size="sm" variant="ghost">
+                    Mark all read
+                  </SubmitButton>
+                </form>
+              }
+              title={`Needs you · ${unreadItems.length}`}
+            >
+              <InboxList items={unreadItems} unread />
             </Card>
           ) : (
-            <EmptyState title="Nothing needs you right now">
-              The morning jobs and the Telegram bot will flag the next post for review.
+            <EmptyState title="You're all caught up">
+              New failures, drafts ready for review and token warnings show up here. Opening a post marks
+              its notifications read.
             </EmptyState>
           )}
+
+          {readItems.length > 0 ? (
+            <details className="group rounded-xl border border-line bg-surface">
+              <summary className="cursor-pointer list-none px-5 py-3 text-sm font-semibold text-zinc-400 hover:text-white">
+                Earlier · {readItems.length}
+                <span className="ml-2 font-normal text-zinc-500">Read, but still open</span>
+              </summary>
+              <div className="border-t border-line px-5 py-2 opacity-70">
+                <InboxList items={readItems} />
+              </div>
+            </details>
+          ) : null}
 
           {scheduledPublications.length > 0 ? (
             <Card title="Coming up">
@@ -324,5 +358,37 @@ export default async function Home() {
         </aside>
       </div>
     </AdminShell>
+  );
+}
+
+function InboxList({ items, unread = false }: { items: InboxItem[]; unread?: boolean }) {
+  return (
+    <ul className="-mx-5 -my-2 divide-y divide-line">
+      {items.map((item) => (
+        <li className="flex gap-3 px-5 py-3" key={item.key}>
+          <span className="pt-2">
+            <StatusDot tone={item.tone} />
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className={unread ? "font-medium text-white" : "font-medium text-zinc-300"}>{item.title}</p>
+              <p className="mt-0.5 text-sm text-zinc-400">{item.detail}</p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {item.actions}
+              {unread ? (
+                <form action={markInboxItemsRead.bind(null, [item.key])}>
+                  <SubmitButton pendingLabel="…" size="sm" variant="ghost">
+                    <span aria-label="Mark read" title="Mark read">
+                      ✓
+                    </span>
+                  </SubmitButton>
+                </form>
+              ) : null}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

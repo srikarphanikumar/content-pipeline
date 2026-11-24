@@ -29,9 +29,12 @@ const areaErrors: Record<string, string> = {
 export function FocusAreasPanel({
   areaError,
   focusAreas,
+  focusNewArea = false,
 }: {
   areaError?: string;
   focusAreas: FocusAreaSummary[];
+  // Set when the page was opened from the "+ Focus area" button, so typing starts right away.
+  focusNewArea?: boolean;
 }) {
   return (
     <div>
@@ -135,7 +138,14 @@ export function FocusAreasPanel({
       >
         <label className={labelClass}>
           New focus area
-          <input className={inputClass} maxLength={60} name="name" placeholder="e.g. Fintech frontend" required />
+          <input
+            autoFocus={focusNewArea}
+            className={inputClass}
+            maxLength={60}
+            name="name"
+            placeholder="e.g. Fintech frontend"
+            required
+          />
         </label>
         <label className={labelClass}>
           Angle (optional)

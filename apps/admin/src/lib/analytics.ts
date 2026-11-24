@@ -4,7 +4,7 @@ import {
   fetchLinkedInSocialMetadata,
   hasLinkedInAnalyticsScope,
 } from "./linkedin";
-import { fetchBlueskyStats, fetchDevToStats } from "./platform-stats";
+import { fetchBlueskyStats, fetchDevToMyArticleStats, fetchDevToStats } from "./platform-stats";
 
 type Metric = {
   name: string;
@@ -18,6 +18,7 @@ type CollectionResult = {
   publicationsChecked: number;
   skipped: Array<{
     platform: Platform;
+    publicationId: string;
     reason: string;
     title: string;
   }>;
@@ -72,6 +73,20 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
       })
     : null;
 
+  // One authenticated listing gives dev.to views for every article. If it fails, fall back to
+  // the public endpoint per article (reactions and comments, no views) and say why.
+  let devToMine: Map<string, { comments?: number; reactions?: number; views?: number }> | null =
+    null;
+  let devToMineError: string | null = null;
+
+  if (publications.some((publication) => publication.platform === "DEVTO")) {
+    try {
+      devToMine = await fetchDevToMyArticleStats();
+    } catch (error) {
+      devToMineError = error instanceof Error ? error.message : "dev.to listing failed";
+    }
+  }
+
   for (const publication of publications) {
     let metrics: Metric[] = [];
 
@@ -80,17 +95,29 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
         if (!publication.externalId) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "Missing dev.to article id",
             title: publication.post.title,
           });
           continue;
         }
 
-        const stats = await fetchDevToStats(publication.externalId);
+        const stats =
+          devToMine?.get(publication.externalId) ?? (await fetchDevToStats(publication.externalId));
+
+        if (devToMineError && stats) {
+          skipped.push({
+            platform: publication.platform,
+            publicationId: publication.id,
+            reason: `Views unavailable: ${devToMineError}`,
+            title: publication.post.title,
+          });
+        }
 
         if (!stats) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "dev.to stats unavailable",
             title: publication.post.title,
           });
@@ -108,6 +135,7 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
         if (!publication.externalId) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "Missing Bluesky post URI",
             title: publication.post.title,
           });
@@ -119,6 +147,7 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
         if (!stats) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "Bluesky stats unavailable",
             title: publication.post.title,
           });
@@ -137,6 +166,7 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
         if (!publication.externalId) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "Missing LinkedIn post URN",
             title: publication.post.title,
           });
@@ -146,6 +176,7 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
         if (!linkedInConnection?.accessToken) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "LinkedIn is not connected",
             title: publication.post.title,
           });
@@ -155,6 +186,7 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
         if (!hasLinkedInAnalyticsScope(linkedInConnection.scope)) {
           skipped.push({
             platform: publication.platform,
+            publicationId: publication.id,
             reason: "LinkedIn analytics read scope missing",
             title: publication.post.title,
           });
@@ -176,6 +208,7 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
     } catch (error) {
       skipped.push({
         platform: publication.platform,
+        publicationId: publication.id,
         reason: error instanceof Error ? error.message : "Stats fetch failed",
         title: publication.post.title,
       });
@@ -205,57 +238,6 @@ export async function collectPlatformMetricSnapshots(): Promise<CollectionResult
     publicationsChecked: publications.length,
     skipped,
   };
-}
-
-export async function latestPlatformStatsLines(options?: { take?: number }) {
-  const publications = await db.platformPublication.findMany({
-    where: {
-      status: "PUBLISHED",
-      platform: {
-        in: ["DEVTO", "BLUESKY", "LINKEDIN", "MEDIUM", "HASHNODE"],
-      },
-    },
-    include: {
-      metricSnapshots: {
-        orderBy: {
-          capturedAt: "desc",
-        },
-        take: 20,
-      },
-      post: {
-        select: {
-          title: true,
-        },
-      },
-    },
-    orderBy: {
-      updatedAt: "desc",
-    },
-    take: options?.take ?? 5,
-  });
-
-  if (publications.length === 0) {
-    return ["- No published platform posts found yet."];
-  }
-
-  return publications.map((publication) => {
-    const latestByMetric = new Map<string, number>();
-
-    for (const snapshot of publication.metricSnapshots) {
-      if (!latestByMetric.has(snapshot.metricName)) {
-        latestByMetric.set(snapshot.metricName, snapshot.metricValue);
-      }
-    }
-
-    const metricText = Array.from(latestByMetric.entries())
-      .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
-      .map(([name, value]) => `${value} ${name}`)
-      .join(", ");
-
-    return `- ${publication.platform}: ${publication.post.title}${
-      metricText ? `\n  ${metricText}` : "\n  Stats not collected yet"
-    }`;
-  });
 }
 
 export function engagementScore(metrics: Array<{ metricName: string; metricValue: number }>) {

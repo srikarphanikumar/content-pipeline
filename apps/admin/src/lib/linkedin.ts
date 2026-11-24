@@ -269,6 +269,44 @@ export async function publishLinkedInPost({
   };
 }
 
+// The article link goes in the first comment rather than the post itself, which keeps the main
+// post free of an outbound link. Uses the same w_member_social permission as posting.
+export async function publishLinkedInComment({
+  accessToken,
+  memberId,
+  postUrn,
+  text,
+}: {
+  accessToken: string;
+  memberId: string;
+  postUrn: string;
+  text: string;
+}) {
+  const response = await fetch(
+    `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(postUrn)}/comments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "Linkedin-Version": linkedInVersion,
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify({
+        actor: `urn:li:person:${memberId}`,
+        message: {
+          text: text.trim(),
+        },
+        object: postUrn,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`LinkedIn first comment failed: ${response.status} ${await response.text()}`);
+  }
+}
+
 export async function fetchLinkedInSocialMetadata({
   accessToken,
   postUrn,

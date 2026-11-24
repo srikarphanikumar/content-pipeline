@@ -7,6 +7,7 @@ import { db, parseTags, slugify } from "@content-pipeline/db";
 import type { PostStatus } from "@content-pipeline/db";
 import { generateAndStoreCoverImage } from "@/lib/cover-image";
 import { createDevToDraft } from "@/lib/devto";
+import { sanitizeDevToTags } from "@/lib/devto-tags";
 import * as workflow from "@/lib/post-workflow";
 import { canonicalPostUrl, queueStatuses } from "@/lib/post-workflow";
 import { generatePromotionCopy } from "@/lib/promotion";
@@ -117,6 +118,9 @@ export async function updatePost(postId: string, formData: FormData) {
       description: stringValue(formData, "description") || null,
       bodyMarkdown: stringValue(formData, "bodyMarkdown"),
       tags: parseTags(formData.get("tags")),
+      ...(formData.has("devToTags")
+        ? { devToTags: sanitizeDevToTags(parseTags(formData.get("devToTags"))) }
+        : {}),
       status: statusValue(formData),
       canonicalUrl: stringValue(formData, "canonicalUrl") || null,
       publishedAt: nullableDateValue(formData, "publishedAt"),

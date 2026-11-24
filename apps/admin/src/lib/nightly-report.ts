@@ -1,4 +1,5 @@
 import { db } from "@content-pipeline/db";
+import { weekOverWeek, type WeekTotals } from "@/lib/distribution-insights";
 import { credentialWarnings, findApprovalCandidate } from "@/lib/pipeline-bot";
 import { approvableStatuses } from "@/lib/post-workflow";
 import { escapeHtml, truncateText } from "@/lib/telegram";
@@ -34,6 +35,35 @@ function formatCount(value: number, name: string) {
   const label = value === 1 ? singular : name;
 
   return `<b>${value.toLocaleString("en-US")}</b> ${label}`;
+}
+
+function change(current: number, previous: number) {
+  if (previous === 0) {
+    return current > 0 ? "new" : "–";
+  }
+
+  const percent = Math.round(((current - previous) / previous) * 100);
+
+  return percent >= 0 ? `▲ ${percent}%` : `▼ ${Math.abs(percent)}%`;
+}
+
+function weekLines(week: { lastWeek: WeekTotals; thisWeek: WeekTotals }) {
+  const { lastWeek, thisWeek } = week;
+  const line = (emoji: string, label: string, key: keyof WeekTotals, unit: string) =>
+    `${emoji} ${label}: <b>${thisWeek[key].toLocaleString("en-US")}</b> ${unit} (${change(thisWeek[key], lastWeek[key])})`;
+
+  return [
+    "",
+    `📈 <b>This week vs last</b> · ${thisWeek.posts} post${thisWeek.posts === 1 ? "" : "s"} vs ${lastWeek.posts}`,
+    line("👩‍💻", "dev.to", "devToViews", "views"),
+    line("👩‍💻", "dev.to", "devToReactions", "reactions"),
+    line("💼", "LinkedIn", "linkedInEngagement", "reactions + comments"),
+    line("🦋", "Bluesky", "blueskyEngagement", "likes, reposts, replies"),
+  ];
+}
+
+function isFridayInNewYork(now: Date) {
+  return new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(now) === "Fri";
 }
 
 function headerDate(now: Date) {
@@ -145,6 +175,11 @@ export async function buildNightlyReport(collection: { capturedAt: Date; skipped
         lines.push(`      <i>${escapeHtml(truncateText(skip, 140))}</i>`);
       }
     }
+  }
+
+  // Fridays close the week with a comparison, so changes to tags and formats show up as numbers.
+  if (isFridayInNewYork(now)) {
+    lines.push(...weekLines(await weekOverWeek(now)));
   }
 
   lines.push(

@@ -9,6 +9,7 @@ import {
   draftNowKeyboard,
   findCardPost,
   findPendingImprovePrompt,
+  findPostForCardMessage,
   publishResultCard,
   sendApprovalCard,
   sendBotMessage,
@@ -33,6 +34,7 @@ import {
   escapeHtml,
   truncateText,
 } from "@/lib/telegram";
+import { popularDevToTags, sanitizeDevToTags } from "@/lib/devto-tags";
 import { isActiveTopicStatus } from "@/lib/topic-status";
 import { inngest } from "./client";
 
@@ -54,6 +56,7 @@ type CommandReceivedData = {
   args?: string;
   command: string;
   messageId?: number;
+  replyToMessageId?: number | null;
 };
 
 const actionLabels: Record<BotAction, string> = {
@@ -452,7 +455,58 @@ export const telegramCommandReceived = inngest.createFunction(
     triggers: [{ event: "telegram/command.received" }],
   },
   async ({ event, step }) => {
-    const { args = "", command, messageId } = event.data as CommandReceivedData;
+    const { args = "", command, messageId, replyToMessageId } = event.data as CommandReceivedData;
+
+    if (command === "tags") {
+      const result = await step.run("Set dev.to tags", async () => {
+        const postId = replyToMessageId ? await findPostForCardMessage(replyToMessageId) : null;
+
+        if (!postId) {
+          return { error: "Reply to an approval card with /tags, e.g. <code>/tags webdev css javascript frontend</code>." };
+        }
+
+        const tags = sanitizeDevToTags(args.split(/[\s,]+/));
+
+        if (tags.length === 0) {
+          return { error: "Send 1 to 4 tags after /tags, e.g. <code>/tags webdev css javascript frontend</code>." };
+        }
+
+        const [post, popular] = await Promise.all([
+          db.post.update({
+            where: { id: postId },
+            data: { devToTags: tags },
+            select: { id: true, title: true },
+          }),
+          popularDevToTags(),
+        ]);
+        const popularSet = new Set(popular);
+
+        return { post, tags, unknown: tags.filter((tag) => !popularSet.has(tag)) };
+      });
+
+      if ("error" in result) {
+        return step.run("Explain tags usage", async () =>
+          sendBotMessage({ kind: "BOT_REPLY", replyToMessageId: messageId, text: result.error ?? "" }),
+        );
+      }
+
+      return step.run("Confirm tags", async () =>
+        sendBotMessage({
+          kind: "BOT_REPLY",
+          postId: result.post.id,
+          replyToMessageId: messageId,
+          text: [
+            `🏷 dev.to tags for ${bold(result.post.title)}: ${result.tags.map((tag) => `<code>${tag}</code>`).join(" ")}`,
+            result.unknown.length
+              ? `\n⚠️ Not among dev.to's popular tags, so few people follow them: ${result.unknown.join(", ")}`
+              : null,
+            "\nThey're used when the post is published to dev.to.",
+          ]
+            .filter((line) => line !== null)
+            .join("\n"),
+        }),
+      );
+    }
 
     if (command === "idea") {
       const [firstLine = "", ...rest] = args.split("\n");

@@ -1,6 +1,6 @@
 import { db } from "@content-pipeline/db";
 import type { NotificationKind } from "@content-pipeline/db";
-import { approvableStatuses } from "@/lib/post-workflow";
+import { approvableStatuses, refreshLegacyDistribution } from "@/lib/post-workflow";
 import {
   escapeHtml,
   sendTelegramMessage,
@@ -53,6 +53,7 @@ export const botHelpText = [
   "",
   "/next shows the next post waiting for approval.",
   "/idea &lt;topic&gt; adds a topic to draft. Extra lines become its description.",
+  "/tags webdev css … as a reply to a card sets that post's dev.to tags.",
 ].join("\n");
 
 export async function recordTelegramDelivery(input: {
@@ -145,10 +146,34 @@ function plainSummary(markdown: string) {
 type CardPost = {
   bodyMarkdown: string;
   description: string | null;
+  devToTags?: string[];
   id: string;
+  linkedInFormat?: string | null;
+  promotionAssets?: Array<{ content: string; type: string }>;
   subtitle: string | null;
   title: string;
 };
+
+// What the post will go out with, so a bad tag pick is caught before Approve rather than after.
+function distributionLines(post: CardPost) {
+  if (!post.devToTags && !post.promotionAssets) {
+    return [];
+  }
+
+  const linkedIn = post.promotionAssets?.find((asset) => asset.type === "LINKEDIN_POST")?.content || "";
+  const hashtags = Array.from(new Set(linkedIn.match(/#[\p{L}\p{N}_]+/gu) || []));
+  const devTo = post.devToTags?.length
+    ? post.devToTags.map((tag) => `<code>${escapeHtml(tag)}</code>`).join(" ")
+    : "<i>picked when the dev.to draft is made</i>";
+  const format = post.linkedInFormat ? ` (${escapeHtml(post.linkedInFormat)})` : "";
+
+  return [
+    "",
+    `🏷 dev.to: ${devTo}`,
+    `💼 LinkedIn${format}: ${hashtags.length ? escapeHtml(hashtags.join(" ")) : "<i>no hashtags</i>"}`,
+    "<i>Reply /tags webdev css … to this card to change the dev.to tags.</i>",
+  ];
+}
 
 export function approvalCardText(post: CardPost, options: { footer?: string; heading?: string } = {}) {
   const summary = truncateText(post.description || plainSummary(post.bodyMarkdown), 500);
@@ -162,6 +187,7 @@ export function approvalCardText(post: CardPost, options: { footer?: string; hea
     subtitle ? `<i>${formatInline(subtitle)}</i>` : null,
     "",
     formatInline(summary),
+    ...distributionLines(post),
     "",
     `<a href="${adminPostUrl(post.id)}">Open in pipeline</a>`,
     options.footer ? `\n${escapeHtml(options.footer)}` : null,
@@ -218,7 +244,18 @@ export function draftNowKeyboard(topicId: string): InlineKeyboard {
 const cardPostSelect = {
   bodyMarkdown: true,
   description: true,
+  devToTags: true,
   id: true,
+  linkedInFormat: true,
+  promotionAssets: {
+    where: {
+      type: "LINKEDIN_POST",
+    },
+    select: {
+      content: true,
+      type: true,
+    },
+  },
   subtitle: true,
   title: true,
 } as const;
@@ -286,9 +323,18 @@ async function findTopicToOffer(afterTopicId?: string) {
 }
 
 export async function sendApprovalCard(
-  post: CardPost,
+  postInput: CardPost,
   options: { footer?: string; heading?: string } = {},
 ) {
+  let post = postInput;
+
+  try {
+    await refreshLegacyDistribution(post.id);
+    post = (await findCardPost(post.id)) || post;
+  } catch (error) {
+    console.error("Could not refresh promo copy for the card", error);
+  }
+
   return sendBotMessage({
     keyboard: approvalKeyboard(post.id),
     kind: "APPROVAL_REQUEST",
@@ -375,6 +421,22 @@ export async function findPendingImprovePrompt(replyToMessageId: number | null) 
       createdAt: "desc",
     },
   });
+}
+
+export async function findPostForCardMessage(messageId: number) {
+  const delivery = await db.notificationDelivery.findFirst({
+    where: {
+      channel: "TELEGRAM",
+      kind: "APPROVAL_REQUEST",
+      messageId: String(messageId),
+      recipient: telegramChatId(),
+    },
+    select: {
+      postId: true,
+    },
+  });
+
+  return delivery?.postId || null;
 }
 
 export async function approvalCardMessageIds(postId: string) {

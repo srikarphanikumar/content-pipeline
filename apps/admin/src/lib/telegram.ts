@@ -230,6 +230,10 @@ export async function setTelegramCommands() {
         command: "idea",
         description: "Add a topic to draft: /idea <topic>",
       },
+      {
+        command: "tags",
+        description: "Reply to a card: /tags webdev css react",
+      },
     ],
   });
 }

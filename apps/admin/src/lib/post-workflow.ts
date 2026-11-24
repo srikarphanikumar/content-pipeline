@@ -10,7 +10,8 @@ import {
 } from "@/app/topics/pipeline";
 import { publishBlueskyPost } from "@/lib/bluesky";
 import { publishDevToArticle, updateDevToDraft } from "@/lib/devto";
-import { publishLinkedInPost } from "@/lib/linkedin";
+import { ensureDevToTags } from "@/lib/devto-tags";
+import { publishLinkedInComment, publishLinkedInPost } from "@/lib/linkedin";
 import { sendPostToActiveSubscribers } from "@/lib/newsletter-send";
 
 // Publishing workflow shared by the admin server actions and the Telegram bot (via Inngest).
@@ -324,16 +325,67 @@ export async function publishLinkedInPromotionForPost(postId: string) {
     throw error;
   }
 
+  // The post is live at this point, so a failed comment is noted on the publication rather
+  // than marking LinkedIn failed (a retry would post a duplicate).
+  const firstComment = await db.promotionAsset.findUnique({
+    where: {
+      postId_type: {
+        postId,
+        type: "LINKEDIN_FIRST_COMMENT",
+      },
+    },
+  });
+  const published = await db.platformPublication.findUniqueOrThrow({
+    where: {
+      id: publication.id,
+    },
+  });
+
+  if (firstComment?.content.trim() && published.externalId) {
+    try {
+      await publishLinkedInComment({
+        accessToken: connection.accessToken,
+        memberId: connection.providerAccountId || "",
+        postUrn: published.externalId,
+        text: firstComment.content,
+      });
+    } catch (error) {
+      console.error("LinkedIn first comment failed", error);
+      await db.platformPublication.update({
+        where: {
+          id: publication.id,
+        },
+        data: {
+          errorMessage: `Posted, but the first comment with the link failed: ${
+            error instanceof Error ? error.message : "unknown error"
+          }`,
+        },
+      });
+    }
+  }
+
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
 }
 
 export async function publishBlueskyPromotionForPost(postId: string) {
-  const blueskyPost = await promotionAssetContent(postId, "BLUESKY_POST");
+  const [blueskyPost, post] = await Promise.all([
+    promotionAssetContent(postId, "BLUESKY_POST"),
+    db.post.findUniqueOrThrow({
+      where: {
+        id: postId,
+      },
+    }),
+  ]);
   const publication = await startPlatformPublication(postId, "BLUESKY");
 
   try {
-    const result = await publishBlueskyPost(blueskyPost);
+    const result = await publishBlueskyPost(blueskyPost, {
+      description: post.description || post.subtitle || "",
+      imageUrl: post.coverImageUrl,
+      title: post.title,
+      uri: post.canonicalUrl || canonicalPostUrl(post.slug),
+    });
 
     await markPlatformPublicationPublished(publication.id, result);
     await db.post.update({
@@ -463,6 +515,13 @@ export async function publishSyndicationAndSocialsForPost(postId: string) {
 }
 
 export async function approveAndPublishPost(postId: string) {
+  try {
+    await refreshLegacyDistribution(postId);
+  } catch (error) {
+    // Old copy still publishes; better than blocking the approval on an OpenAI hiccup.
+    console.error("Could not refresh promo copy before approval", error);
+  }
+
   const post = await db.post.findUnique({
     where: {
       id: postId,
@@ -821,4 +880,25 @@ export async function retryFailedPlatforms(postId: string) {
   await markCompleteIfFullySyndicated(postId);
   revalidatePath("/posts");
   revalidatePath(`/posts/${postId}`);
+}
+
+// Drafts made before the distribution fixes carry old promo copy (link and a hashtag wall in the
+// LinkedIn post) and no picked dev.to tags. linkedInFormat is only set by the new generator, so
+// a draft without it gets fresh copy and tags once, before its card is shown or it is approved.
+export async function refreshLegacyDistribution(postId: string) {
+  const post = await db.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
+
+  if (!post || post.sourcePlatform || !queueStatuses.includes(post.status)) {
+    return;
+  }
+
+  await ensureDevToTags(post);
+
+  if (!post.linkedInFormat) {
+    await ensurePromotionAssets(postId);
+  }
 }

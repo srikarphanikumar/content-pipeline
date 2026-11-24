@@ -1,4 +1,5 @@
 import type { Post } from "@content-pipeline/db";
+import { ensureDevToTags, sanitizeDevToTags } from "./devto-tags";
 import { learningResourceMarkdown } from "./learning-resources";
 
 type DevToArticleResponse = {
@@ -13,14 +14,6 @@ function blogBaseUrl() {
 
 function postUrl(post: Pick<Post, "slug">) {
   return `${blogBaseUrl()}/posts/${post.slug}`;
-}
-
-function devToTags(tags: string[]) {
-  const normalized = tags
-    .map((tag) => tag.toLowerCase().replace(/[^a-z0-9]/g, ""))
-    .filter(Boolean);
-
-  return Array.from(new Set(normalized)).slice(0, 4);
 }
 
 function devToBody(post: Post) {
@@ -63,14 +56,15 @@ export function buildDevToArticle(post: Post, options?: { published?: boolean })
     title: post.title,
     published: options?.published ?? false,
     body_markdown: devToBody(post),
-    tags: devToTags(post.tags),
+    tags: sanitizeDevToTags(post.devToTags.length > 0 ? post.devToTags : post.tags),
     canonical_url: postUrl(post),
     description: post.description || post.subtitle || undefined,
     main_image: post.coverImageUrl || undefined,
   };
 }
 
-export async function createDevToDraft(post: Post) {
+export async function createDevToDraft(postInput: Post) {
+  const post = await ensureDevToTags(postInput);
   const response = await fetch("https://dev.to/api/articles", {
     method: "POST",
     headers: devToHeaders(),
@@ -89,7 +83,8 @@ export async function createDevToDraft(post: Post) {
 
 // Keeps an unpublished dev.to draft in sync after the post body changes. Recreates the draft
 // if it was deleted on dev.to, same as publishDevToArticle does.
-export async function updateDevToDraft(post: Post, articleId: string) {
+export async function updateDevToDraft(postInput: Post, articleId: string) {
+  const post = await ensureDevToTags(postInput);
   const response = await fetch(`https://dev.to/api/articles/${articleId}`, {
     method: "PUT",
     headers: devToHeaders(),
@@ -110,7 +105,9 @@ export async function updateDevToDraft(post: Post, articleId: string) {
   return (await response.json()) as DevToArticleResponse;
 }
 
-export async function publishDevToArticle(post: Post, articleId?: string | null) {
+export async function publishDevToArticle(postInput: Post, articleId?: string | null): Promise<DevToArticleResponse> {
+  // Drafts made before tag picking existed get proper tags at publish time.
+  const post = await ensureDevToTags(postInput);
   const response = await fetch(
     articleId ? `https://dev.to/api/articles/${articleId}` : "https://dev.to/api/articles",
     {

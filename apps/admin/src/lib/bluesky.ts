@@ -28,6 +28,16 @@ type BlueskyFacet = {
 
 const textEncoder = new TextEncoder();
 
+// Bluesky rejects blobs over 1,000,000 bytes; stay under it with some margin.
+const maxThumbBytes = 950_000;
+
+export type BlueskyLinkCard = {
+  description: string;
+  imageUrl?: string | null;
+  title: string;
+  uri: string;
+};
+
 function requiredEnv(name: string) {
   const value = process.env[name];
 
@@ -137,13 +147,80 @@ function richTextFacets(text: string) {
   return facets;
 }
 
-export async function publishBlueskyPost(text: string) {
+// Cover images are often 1-3 MB PNGs, so they are resized to a JPEG before upload.
+async function uploadThumb(accessJwt: string, imageUrl: string) {
+  const { default: sharp } = await import("sharp");
+  const source = await fetch(imageUrl);
+
+  if (!source.ok) {
+    throw new Error(`Cover image fetch returned ${source.status}`);
+  }
+
+  const input = Buffer.from(await source.arrayBuffer());
+  let image: Buffer | null = null;
+
+  for (const quality of [82, 70, 55]) {
+    const candidate = await sharp(input).resize({ width: 1200, withoutEnlargement: true }).jpeg({ quality }).toBuffer();
+
+    if (candidate.byteLength <= maxThumbBytes) {
+      image = candidate;
+      break;
+    }
+  }
+
+  if (!image) {
+    throw new Error("Cover image is too large for a Bluesky card even after compression.");
+  }
+
+  const response = await fetch("https://bsky.social/xrpc/com.atproto.repo.uploadBlob", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessJwt}`,
+      "Content-Type": "image/jpeg",
+    },
+    body: new Uint8Array(image),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Bluesky image upload failed: ${response.status} ${await response.text()}`);
+  }
+
+  return ((await response.json()) as { blob: unknown }).blob;
+}
+
+async function externalEmbed(accessJwt: string, card: BlueskyLinkCard) {
+  let thumb: unknown = undefined;
+
+  if (card.imageUrl) {
+    try {
+      thumb = await uploadThumb(accessJwt, card.imageUrl);
+    } catch (error) {
+      // A card without an image still beats a bare URL, so the post goes out regardless.
+      console.error("Bluesky card image skipped", error);
+    }
+  }
+
+  return {
+    $type: "app.bsky.embed.external",
+    external: {
+      description: card.description.slice(0, 300),
+      title: card.title.slice(0, 300),
+      uri: card.uri,
+      ...(thumb ? { thumb } : {}),
+    },
+  };
+}
+
+// With a card, the article link lives in the card, so the text can spend all 300 characters
+// on the insight itself.
+export async function publishBlueskyPost(text: string, card?: BlueskyLinkCard) {
   if (!text.trim()) {
     throw new Error("Bluesky post copy is required.");
   }
 
   const trimmedText = text.trim().slice(0, 300);
   const session = await createBlueskySession();
+  const embed = card ? await externalEmbed(session.accessJwt, card) : undefined;
   const response = await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
     method: "POST",
     headers: {
@@ -157,6 +234,7 @@ export async function publishBlueskyPost(text: string) {
         $type: "app.bsky.feed.post",
         text: trimmedText,
         facets: richTextFacets(trimmedText),
+        ...(embed ? { embed } : {}),
         createdAt: new Date().toISOString(),
       },
     }),

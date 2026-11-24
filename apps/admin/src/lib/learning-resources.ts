@@ -119,25 +119,6 @@ export function learningResourcePromptContext(post: Post) {
       (resource) =>
         `- ${resource.linkedInText}: ${resource.url}; hashtags: ${resource.hashtags.join(" ")}`,
     ),
-    "Use at most 1-2 in the LinkedIn main post. Prefer useful resource wording over tag spam.",
+    "Mention at most one by name in the LinkedIn post, and never include its URL.",
   ].join("\n");
-}
-
-export function learningResourceLinkedInLine(post: Post) {
-  const matches = recommendedLearningResources(post);
-
-  if (matches.length === 0) {
-    return "";
-  }
-
-  return `Helpful resources to keep nearby: ${matches
-    .slice(0, 2)
-    .map((resource) => `${resource.linkedInText} (${resource.url})`)
-    .join(", ")}`;
-}
-
-export function learningResourceHashtags(post: Post) {
-  return Array.from(
-    new Set(recommendedLearningResources(post).flatMap((resource) => resource.hashtags)),
-  );
 }

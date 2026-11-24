@@ -136,6 +136,7 @@ export async function POST(request: Request) {
         args: text.slice(commandMatch?.[0].length ?? 0).trim(),
         command,
         messageId: message.message_id,
+        replyToMessageId: message.reply_to_message?.message_id ?? null,
       },
       id: eventId,
       name: "telegram/command.received",

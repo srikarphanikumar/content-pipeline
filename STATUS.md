@@ -492,6 +492,22 @@ Inngest schedules (weekdays, `America/New_York`):
 - morning approval card: 6:45 AM
 - nightly stats/topic prep: 9:00 PM
 
+### Distribution (November 2026)
+
+Reach fixes after posts were getting almost no views:
+
+- dev.to tags are picked from dev.to's real popular-tag list (never invented), stored on
+  `Post.devToTags`, shown on the Telegram card, editable on the post page or by replying
+  `/tags webdev css …` to a card.
+- LinkedIn posts rotate formats (`Post.linkedInFormat`: story, contrarian, explainer, question,
+  mistakes), carry no link and at most 5 hashtags. The article link goes in a first comment,
+  which is now actually posted after the main post.
+- Bluesky posts attach a link card with the cover image (resized with sharp to fit the 1 MB
+  blob limit) instead of a bare URL.
+- Drafts created before this get fresh copy and tags once, when their card is sent or at Approve.
+- Analytics → "What's working" compares dev.to tags before/after picking, LinkedIn formats and
+  individual tags. Friday's nightly report adds this week vs last.
+
 ### dev.to Draft Publishing
 
 The BRD calls for dev.to as the main discovery platform. Draft creation is now wired.

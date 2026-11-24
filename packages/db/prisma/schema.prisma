@@ -126,6 +126,10 @@ model Post {
   bodyMarkdown   String     @db.Text
   coverImageUrl  String?
   tags           String[]   @default([])
+  // Exactly the tags sent to dev.to: picked from dev.to's popular tags, editable before approval.
+  devToTags      String[]   @default([])
+  // Which LinkedIn post format the promo copy used, so formats can be compared later.
+  linkedInFormat String?
   status         PostStatus @default(IDEA)
   canonicalUrl   String?
   sourcePlatform Platform?

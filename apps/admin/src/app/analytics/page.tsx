@@ -3,6 +3,8 @@ import { db, formatDate } from "@content-pipeline/db";
 import type { Platform } from "@content-pipeline/db";
 import { SubmitButton } from "../components/SubmitButton";
 import { AdminShell } from "../components/AdminShell";
+import { Card } from "../components/ui";
+import { whatsWorking } from "@/lib/distribution-insights";
 import { collectAnalyticsNow, triggerInngestFunction } from "./actions";
 import { engagementScore } from "@/lib/analytics";
 import { hasLinkedInAnalyticsScope } from "@/lib/linkedin";
@@ -63,6 +65,7 @@ function metricSummary(metrics: ReturnType<typeof latestMetrics>) {
 
 export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps) {
   const { manual } = await searchParams;
+  const working = await whatsWorking();
   const since = thirtyDaysAgo();
   const [
     totalPublishedPosts,
@@ -228,6 +231,35 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
           {manual}
         </div>
       ) : null}
+
+      <Card
+        className="mb-6"
+        description="Per-post averages for posts published in the last 60 days. Small groups are noisy, so check the post count before reading too much into one."
+        title="What's working"
+      >
+        <div className="grid gap-6 lg:grid-cols-3">
+          <InsightTable
+            columns={["Posts", "dev.to views", "Reactions"]}
+            empty="No dev.to stats yet."
+            rows={working.tagFix
+              .filter((row) => row.posts > 0)
+              .map((row) => [row.label, row.posts, row.avgViews, row.avgReactions])}
+            title="dev.to tags: before vs after picking"
+          />
+          <InsightTable
+            columns={["Posts", "Reactions + comments"]}
+            empty="Formats are recorded from now on."
+            rows={working.linkedInFormats.map((row) => [row.format, row.posts, row.avgEngagement])}
+            title="LinkedIn post format"
+          />
+          <InsightTable
+            columns={["Posts", "Avg views"]}
+            empty="Picked tags show up here after the first posts go out."
+            rows={working.devToTags.map((row) => [row.tag, row.posts, row.avgViews])}
+            title="dev.to tag"
+          />
+        </div>
+      </Card>
 
       <section className="mb-6 rounded-lg border border-white/10 bg-[#141414] p-5">
         <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
@@ -491,5 +523,51 @@ export default async function AnalyticsPage({ searchParams }: AnalyticsPageProps
         </div>
       </section>
     </AdminShell>
+  );
+}
+
+function InsightTable({
+  columns,
+  empty,
+  rows,
+  title,
+}: {
+  columns: string[];
+  empty: string;
+  rows: Array<[string, ...number[]]>;
+  title: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <h3 className="text-sm font-semibold text-zinc-300">{title}</h3>
+      {rows.length === 0 ? (
+        <p className="mt-2 text-sm text-zinc-500">{empty}</p>
+      ) : (
+        <table className="mt-2 w-full text-sm">
+          <thead className="text-left text-xs text-zinc-500">
+            <tr>
+              <th className="py-1 pr-2 font-medium" />
+              {columns.map((column) => (
+                <th className="py-1 pl-2 text-right font-medium" key={column}>
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {rows.map(([label, ...values]) => (
+              <tr key={label}>
+                <td className="truncate py-1.5 pr-2 text-zinc-200">{label}</td>
+                {values.map((value, index) => (
+                  <td className="py-1.5 pl-2 text-right tabular-nums text-white" key={columns[index]}>
+                    {value.toLocaleString("en-US")}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }

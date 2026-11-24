@@ -57,6 +57,22 @@ export function PostForm({ action, post }: PostFormProps) {
         </label>
       </div>
 
+      {post ? (
+        <label className={labelClass}>
+          dev.to tags
+          <input
+            className={inputClass}
+            name="devToTags"
+            placeholder="Picked automatically from dev.to's popular tags"
+            defaultValue={post.devToTags.join(", ")}
+          />
+          <span className="text-xs font-normal text-zinc-500">
+            Up to 4. dev.to shows posts to people who follow these tags, so popular ones (webdev, css,
+            javascript…) reach far more readers than niche ones. Clear it to have the pipeline pick again.
+          </span>
+        </label>
+      ) : null}
+
       <label className={labelClass}>
         Description
         <textarea

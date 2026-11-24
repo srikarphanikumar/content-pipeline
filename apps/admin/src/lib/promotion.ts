@@ -1,16 +1,34 @@
 import OpenAI from "openai";
+import { db } from "@content-pipeline/db";
 import type { Post } from "@content-pipeline/db";
-import {
-  learningResourceHashtags,
-  learningResourceLinkedInLine,
-  learningResourcePromptContext,
-} from "./learning-resources";
+import { learningResourcePromptContext } from "./learning-resources";
 
 type PromotionCopy = {
   linkedInPost: string;
   linkedInFirstComment: string;
   blueskyPost: string;
 };
+
+// LinkedIn posts rotate through these so the feed doesn't see the same template every day.
+// The key is stored on the post (linkedInFormat) so formats can be compared by results.
+export const linkedInFormats = {
+  story:
+    "A short first-person debugging story: the moment it broke, what you assumed, what was really happening, and the lesson. 120-200 words.",
+  contrarian:
+    "Open with a sharp, defensible contrarian take drawn from the article (\"X isn't the problem. Y is.\"), then 3-4 short paragraphs backing it with the actual mechanism. 100-180 words.",
+  explainer:
+    "One surprising fact as the hook, then explain the mechanism plainly in 3-5 short paragraphs, ending with the practical takeaway. 120-200 words.",
+  question:
+    "Open with a question engineers often get wrong in code review or interviews, give a beat for the reader to guess, then the answer and why. 100-180 words.",
+  mistakes:
+    "\"3 mistakes I keep seeing with <topic>\": numbered 1. 2. 3., each one line plus one line on why it bites. 100-170 words.",
+} as const;
+
+export type LinkedInFormat = keyof typeof linkedInFormats;
+
+const formatOrder = Object.keys(linkedInFormats) as LinkedInFormat[];
+const maxLinkedInHashtags = 5;
+const maxBlueskyHashtags = 3;
 
 function blogBaseUrl() {
   return (process.env.BLOG_BASE_URL || "https://blog.mspk.me").replace(/\/$/, "");
@@ -26,162 +44,106 @@ function postContext(post: Post) {
     post.subtitle ? `Subtitle: ${post.subtitle}` : null,
     post.description ? `Description: ${post.description}` : null,
     post.tags.length > 0 ? `Tags: ${post.tags.join(", ")}` : null,
-    `Canonical URL: ${postUrl(post)}`,
     "",
     "Article markdown excerpt:",
     post.bodyMarkdown.slice(0, 6000),
   ]
-    .filter(Boolean)
+    .filter((line) => line !== null)
     .join("\n");
 }
 
-function hashtagFromTag(tag: string) {
-  return tag
+// Next format in rotation after the ones used most recently, so consecutive posts differ.
+async function nextLinkedInFormat(postId: string): Promise<LinkedInFormat> {
+  const recent = await db.post.findMany({
+    where: {
+      id: { not: postId },
+      linkedInFormat: { not: null },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: formatOrder.length - 1,
+    select: { linkedInFormat: true },
+  });
+  const recentFormats = new Set(recent.map((post) => post.linkedInFormat));
+
+  return formatOrder.find((format) => !recentFormats.has(format)) || formatOrder[0];
+}
+
+function stripUrls(text: string) {
+  return text.replace(/https?:\/\/\S+/g, "").replace(/[ \t]+\n/g, "\n");
+}
+
+// Keeps the first `max` distinct hashtags and drops the rest, so a model that over-tags can't
+// turn the post back into a hashtag wall.
+function limitHashtags(text: string, max: number) {
+  const kept = new Set<string>();
+
+  return text
+    .replace(/(^|\s)#([\p{L}\p{N}_]+)/gu, (match, prefix: string, tag: string) => {
+      const key = tag.toLowerCase();
+
+      if (kept.has(key)) {
+        return prefix;
+      }
+
+      if (kept.size >= max) {
+        return prefix;
+      }
+
+      kept.add(key);
+      return match;
+    })
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function cleanLinkedInPost(text: string) {
+  return limitHashtags(stripUrls(text), maxLinkedInHashtags);
+}
+
+export function cleanBlueskyPost(text: string) {
+  return limitHashtags(stripUrls(text), maxBlueskyHashtags).slice(0, 300).trim();
+}
+
+// The link lives here rather than in the post body. Built in code, not by the model, so the
+// URL is always exactly right.
+function linkedInFirstComment(post: Post) {
+  return [
+    `Full article: ${postUrl(post)}`,
+    "",
+    `I write one of these deep dives every weekday. Get them in your inbox: ${blogBaseUrl()}/#subscribe`,
+  ].join("\n");
+}
+
+function hashtag(tag: string) {
+  return `#${tag
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("");
-}
-
-function linkedInHashtags(post: Post) {
-  const baseTags = [
-    ...post.tags.map(hashtagFromTag),
-    ...learningResourceHashtags(post).map((tag) => tag.replace(/^#/, "")),
-    "Frontend",
-    "FrontendEngineering",
-    "WebDevelopment",
-    "JavaScript",
-    "TypeScript",
-    "ReactJS",
-    "BrowserInternals",
-    "WebPerformance",
-    "SoftwareEngineering",
-    "Programming",
-    "TechWriting",
-    "EngineeringLeadership",
-    "AIEngineering",
-    "FullStackDevelopment",
-    "WebDev",
-  ].filter(Boolean);
-  const uniqueTags = Array.from(new Set(baseTags)).slice(0, 18);
-
-  return uniqueTags.map((tag) => `#${tag}`).join(" ");
-}
-
-function linkedInCommentHashtags(post: Post) {
-  const baseTags = [
-    ...post.tags.map(hashtagFromTag),
-    ...learningResourceHashtags(post).map((tag) => tag.replace(/^#/, "")),
-    "Frontend",
-    "JavaScript",
-    "TypeScript",
-    "ReactJS",
-    "NextJS",
-    "WebDevelopment",
-    "WebDev",
-    "FrontendDevelopment",
-    "FrontendEngineering",
-    "FullStackDevelopment",
-    "SoftwareEngineering",
-    "Programming",
-    "Coding",
-    "WebPerformance",
-    "BrowserInternals",
-    "DeveloperTools",
-    "AIEngineering",
-    "Tech",
-    "TechCommunity",
-  ].filter(Boolean);
-  const uniqueTags = Array.from(new Set(baseTags)).slice(0, 24);
-
-  return uniqueTags.map((tag) => `#${tag}`).join(" ");
-}
-
-function blueskyHashtags(post: Post) {
-  const baseTags = [
-    ...post.tags.map(hashtagFromTag),
-    ...learningResourceHashtags(post).map((tag) => tag.replace(/^#/, "")),
-    "Frontend",
-    "JavaScript",
-    "WebDev",
-    "SoftwareEngineering",
-    "AIEngineering",
-  ].filter(Boolean);
-  const uniqueTags = Array.from(new Set(baseTags)).slice(0, 6);
-
-  return uniqueTags.map((tag) => `#${tag}`).join(" ");
-}
-
-function blueskyCopy(post: Post, summary: string, url: string) {
-  const tags = blueskyHashtags(post);
-  const base = `${post.title}\n\n${summary}\n\n${url}`;
-  const withTags = `${base}\n\n${tags}`;
-
-  if (withTags.length <= 300) {
-    return withTags;
-  }
-
-  const availableSummaryLength = Math.max(0, 300 - `${post.title}\n\n\n\n${url}\n\n${tags}`.length);
-  const trimmedSummary =
-    summary.length > availableSummaryLength
-      ? `${summary.slice(0, Math.max(0, availableSummaryLength - 1)).trim()}…`
-      : summary;
-
-  return `${post.title}\n\n${trimmedSummary}\n\n${url}\n\n${tags}`.slice(0, 300);
+    .join("")}`;
 }
 
 function fallbackPromotionCopy(post: Post): PromotionCopy {
-  const url = postUrl(post);
   const summary = post.description || post.subtitle || "A new Under The Hood deep dive is live.";
-  const resourceLine = learningResourceLinkedInLine(post);
+  const tags = post.tags.slice(0, 3).map(hashtag).join(" ");
 
   return {
-    linkedInPost: [
-      `If you work on frontend systems, ${post.title.toLowerCase()} is worth understanding.`,
-      "",
-      summary,
-      "",
-      "In this article, I break down:",
-      "✅ The underlying browser/runtime behavior",
-      "✅ Why the common abstraction hides the real tradeoff",
-      "✅ The implementation details that cause production bugs",
-      "✅ How to reason about the problem when debugging",
-      "",
-      "Once you understand the mechanics, the behavior gets much easier to predict.",
-      resourceLine ? "" : null,
-      resourceLine || null,
-      "",
-      "📖 Read the full article:",
-      url,
-      "",
-      linkedInHashtags(post),
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    linkedInFirstComment: [
-      `Read the full essay and subscribe for future Under The Hood deep dives: ${url}`,
-      "",
-      linkedInCommentHashtags(post),
-    ].join("\n"),
-    blueskyPost: blueskyCopy(post, summary, url),
-  };
-}
-
-function parsePromotionJson(value: string): PromotionCopy {
-  const parsed = JSON.parse(value) as Partial<PromotionCopy>;
-
-  if (!parsed.linkedInPost || !parsed.linkedInFirstComment || !parsed.blueskyPost) {
-    throw new Error("Promotion response was missing required fields.");
-  }
-
-  return {
-    linkedInPost: parsed.linkedInPost,
-    linkedInFirstComment: parsed.linkedInFirstComment,
-    blueskyPost: parsed.blueskyPost.slice(0, 300),
+    linkedInPost: cleanLinkedInPost(
+      [post.title, "", summary, "", "Full breakdown in the first comment.", "", tags || "#WebDev"].join("\n"),
+    ),
+    linkedInFirstComment: linkedInFirstComment(post),
+    blueskyPost: cleanBlueskyPost(`${post.title}\n\n${summary}\n\n${post.tags.slice(0, 2).map(hashtag).join(" ")}`),
   };
 }
 
 export async function generatePromotionCopy(post: Post): Promise<PromotionCopy> {
+  const format = await nextLinkedInFormat(post.id);
+
+  await db.post.update({
+    where: { id: post.id },
+    data: { linkedInFormat: format },
+  });
+
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -191,23 +153,35 @@ export async function generatePromotionCopy(post: Post): Promise<PromotionCopy> 
   const openai = new OpenAI({ apiKey });
   const response = await openai.chat.completions.create({
     model: "gpt-4.1-mini",
-    temperature: 0.7,
+    temperature: 0.8,
     response_format: { type: "json_object" },
     messages: [
       {
         role: "system",
         content:
-          "You write LinkedIn-native and Bluesky-native promotion copy for a technical publication called Under The Hood. The audience is frontend, JavaScript, full-stack, and AI engineers. Use concrete technical hooks, crisp spacing, and practical language. Return only valid JSON.",
+          "You write native social posts for Srikar, a senior frontend engineer who publishes Under The Hood, a technical publication. The audience is frontend, JavaScript, full-stack and AI engineers. Write like a real engineer talking to peers: specific, opinionated, plain. Return only valid JSON.",
       },
       {
         role: "user",
         content: [
-          "Generate promotion copy for this article.",
+          "Write social posts for this article.",
           "",
-          "Return JSON with exactly these keys:",
-          "- linkedInPost: formatted like a strong technical LinkedIn post, 130-230 words. Use this structure: hook line, blank line, short problem/context paragraph, blank line, 'Inside you'll learn:' or 'In this article, I break down:', 4-6 checklist bullets using ✅, blank line, a concluding sentence, optional one-line helpful-resource mention if relevant, blank line, '📖 Read the full article:', canonical URL, blank line, 12-18 highly relevant hashtags. Include article-specific tags first, then broader discovery tags. Do not use markdown bullets. Do not sound salesy.",
-          "- linkedInFirstComment: one short CTA sentence pointing to the canonical URL and newsletter, blank line, then 15-25 relevant hashtags. Include tags for the article topic, recommended learning resources, frontend/software engineering, JavaScript/TypeScript/React/AI when relevant, and broader developer discovery. Avoid unrelated trend tags.",
-          "- blueskyPost: <= 300 characters including the URL. Direct and punchy. Include 3-6 relevant hashtags at the end, prioritizing article-specific tags and developer discovery tags.",
+          'Return JSON with exactly these keys: "linkedInPost", "blueskyPost".',
+          "",
+          "linkedInPost:",
+          `- Format: ${linkedInFormats[format]}`,
+          "- The first line is the hook and must stand alone. It is all most people see before \"see more\".",
+          "- Short paragraphs, 1-3 lines each, blank lines between them.",
+          "- NO links or URLs anywhere. End with one line pointing to the first comment, e.g. \"Full breakdown in the first comment.\"",
+          "- End with exactly 3 hashtags on their own line: specific to the topic first, one broad (e.g. #WebDev, #JavaScript). No more than 3.",
+          "- Do NOT use checklist emojis (✅), \"In this article\", \"Inside you'll learn\", or a bullet list of what the article covers.",
+          "- At most one emoji in the whole post. No em dashes.",
+          "- Avoid AI-sounding words: delve, unpack, robust, seamless, crucial, game changer, in today's fast-paced, at the heart of.",
+          "",
+          "blueskyPost:",
+          "- At most 260 characters. A link card to the article is attached automatically, so do NOT include a URL.",
+          "- One concrete, specific insight from the article, said plainly.",
+          "- End with 2 relevant hashtags.",
           "",
           learningResourcePromptContext(post),
           "",
@@ -217,14 +191,18 @@ export async function generatePromotionCopy(post: Post): Promise<PromotionCopy> 
     ],
   });
 
-  const content = response.choices[0]?.message.content;
-
-  if (!content) {
-    return fallbackPromotionCopy(post);
-  }
-
   try {
-    return parsePromotionJson(content);
+    const parsed = JSON.parse(response.choices[0]?.message.content || "") as Partial<PromotionCopy>;
+
+    if (!parsed.linkedInPost?.trim() || !parsed.blueskyPost?.trim()) {
+      throw new Error("Promotion response was missing required fields.");
+    }
+
+    return {
+      linkedInPost: cleanLinkedInPost(parsed.linkedInPost),
+      linkedInFirstComment: linkedInFirstComment(post),
+      blueskyPost: cleanBlueskyPost(parsed.blueskyPost),
+    };
   } catch (error) {
     console.error("Could not parse promotion copy JSON.", error);
     return fallbackPromotionCopy(post);
